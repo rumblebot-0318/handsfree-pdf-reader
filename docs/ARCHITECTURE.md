@@ -1,92 +1,114 @@
-# Architecture Document: Hands-Free PDF Reader (MVP)
+# Architecture
 
-## 1. Overview
+## Summary
+Handsfree PDF Reader is a browser-first React + TypeScript application that keeps platform-specific code at the edges and keeps portable business logic in a small core layer. The immediate target is a desktop web MVP. The medium-term target is a React Native client that can reuse gesture interpretation and navigation state logic.
 
-The Hands-Free PDF Reader is designed as a client-side, browser-based web application with a strong emphasis on privacy. All core functionalities, including PDF rendering and gesture detection, will execute entirely within the user's browser environment. No webcam data, PDF content, or gesture-derived information will be transmitted to any external servers.
+## Architecture goals
+- Keep webcam, PDF rendering, and browser APIs isolated from reusable logic.
+- Keep gesture interpretation deterministic and testable.
+- Preserve a clean path to React Native by minimizing DOM assumptions outside UI/hooks.
+- Process camera data locally in-browser.
 
-## 2. High-Level Architecture
+## Layered design
 
-```
-+-----------------------------------------------------------------------+
-| User's Web Browser                                                    |
-|                                                                       |
-| +---------------------+      +---------------------+      +--------+ |
-| |  User Interface (UI)  |      |  PDF Renderer       |      |  Data  | |
-| |  (HTML, CSS, JS)    |<---->|  (PDF.js)           |<---->|  Store | |
-| +----------^----------+      +----------^----------+      | (Local | |
-|            |                          |                     | Storage)| |
-|            |                          |                     +--------+ |
-|            |                          |                               |
-|            |      +-------------------+-------------------+           |
-|            |      | Webcam & Gesture Detection Module       |           |
-|            +----->| (getUserMedia, Face Tracking Library) |<----------+
-|                   +---------------------------------------+           |
-|                                                                       |
-+-----------------------------------------------------------------------+
-```
+### 1. UI layer
+Files:
+- `src/App.tsx`
+- `src/components/*`
+- `src/styles/app.css`
 
-## 3. Component Breakdown
+Responsibilities:
+- Present upload, webcam, and reader controls
+- Render status and feedback
+- Bind gesture events to viewer updates
 
-### 3.1. User Interface (UI)
+### 2. Platform integration layer
+Files:
+- `src/hooks/usePdfViewer.ts`
+- `src/hooks/useGestureController.ts`
+- `src/lib/pdf.ts`
 
--   **Technologies:** HTML, CSS, Vanilla JavaScript (or a lightweight framework if deemed necessary for maintainability, but vanilla for MVP simplicity).
--   **Responsibilities:**
-    -   Displays the main application layout, including PDF viewing area and controls.
-    -   Handles user interactions (e.g., file upload, webcam start/stop buttons).
-    -   Provides visual feedback for gesture detection.
-    -   Orchestrates data flow between other modules.
+Responsibilities:
+- Talk to browser APIs (`getUserMedia`, canvas)
+- Talk to MediaPipe face landmark detection
+- Talk to PDF.js rendering
+- Expose UI-friendly state and callbacks
 
-### 3.2. PDF Renderer
+### 3. Portable core layer
+Files:
+- `src/core/defaults.ts`
+- `src/core/gesture-engine.ts`
+- `src/core/navigation.ts`
+- `src/types/index.ts`
 
--   **Technology:** PDF.js (Mozilla's PDF rendering library for HTML5).
--   **Responsibilities:**
-    -   Loads and parses PDF files provided by the user.
-    -   Renders PDF pages onto HTML `<canvas>` elements for display in the UI.
-    -   Manages current page state and navigates between pages upon request.
+Responsibilities:
+- Turn face landmarks into gesture events
+- Map gestures into document navigation intent
+- Hold shared configuration defaults and types
 
-### 3.3. Webcam & Gesture Detection Module
+This is the layer intended for later reuse in React Native.
 
--   **Technologies:**
-    -   `navigator.mediaDevices.getUserMedia()` for webcam access.
-    -   A client-side face tracking library (e.g., MediaPipe Face Mesh, or a custom WebAssembly/JS implementation) to perform:
-        -   Face detection.
-        -   Facial landmark extraction (for wink detection).
-        -   Head pose estimation (for nod/shake detection).
--   **Responsibilities:**
-    -   Initializes and manages the webcam stream.
-    -   Continuously processes video frames to detect facial gestures (wink, head nod, head shake).
-    -   Emits events or calls callbacks when a valid gesture is detected, signaling the UI to navigate.
-    -   Ensures all processing is done locally within the browser context.
+## Runtime data flow
+1. User uploads a PDF.
+2. `usePdfViewer` reads the file and loads it with PDF.js.
+3. Page 1 is rendered into canvas.
+4. User starts webcam processing.
+5. `useGestureController` opens the camera and starts a MediaPipe detection loop.
+6. Landmarks are passed into `gesture-engine.ts`.
+7. The gesture engine returns a gesture event when a wink/head turn crosses threshold and cooldown requirements.
+8. `navigation.ts` converts gesture action into a new page state.
+9. `usePdfViewer` re-renders the active page.
 
-### 3.4. Data Store (Local Storage)
+## Portability strategy
 
--   **Technology:** Browser's `localStorage` or `IndexedDB`.
--   **Responsibilities:**
-    -   Temporarily stores the loaded PDF file (e.g., as a `File` object or `ArrayBuffer`) for rendering.
-    -   May store user preferences (e.g., last viewed page, if implemented in a later stage).
-    -   Crucially, **no sensitive data or webcam feed frames are persisted or transmitted.**
+### What should stay portable
+- Gesture thresholds
+- Landmark interpretation heuristics
+- Navigation rules
+- Calibration model shape
+- Shared types
 
-## 4. Data Flow
+### What remains web-only
+- PDF.js rendering
+- Browser `canvas`
+- Browser `video`
+- `navigator.mediaDevices.getUserMedia`
+- MediaPipe browser runtime and asset loading
 
-1.  **User Action:** User uploads a PDF via UI (drag-and-drop or file input).
-2.  **PDF Loading:** UI passes the PDF `File` or `ArrayBuffer` to the PDF Renderer.
-3.  **PDF Display:** PDF Renderer loads the PDF and renders the first page to a `<canvas>` element in the UI.
-4.  **Webcam Start:** User clicks `[Start Webcam]`. UI requests webcam access via `getUserMedia()`.
-5.  **Frame Processing:** Webcam & Gesture Detection Module receives video frames from the webcam stream.
-6.  **Gesture Detection:** Module analyzes frames for winks, head nods, or head shakes.
-7.  **Navigation Event:** Upon detecting a valid gesture, the module signals the UI (e.g., via a custom event or callback) with the detected gesture type.
-8.  **Page Change:** UI receives the gesture event and instructs the PDF Renderer to navigate to the next or previous page.
-9.  **Visual Feedback:** UI displays temporary visual confirmation of the gesture and page change.
+### React Native migration plan
+When a mobile app is introduced:
+- Move `src/core/*` and shared types into a reusable package boundary
+- Replace browser webcam hook with RN camera integration
+- Replace PDF.js canvas rendering with native/mobile document rendering
+- Keep gesture output contract stable: `GestureEvent -> navigation state`
 
-## 5. Security & Privacy Considerations
+## Risks
+- MediaPipe bundle size is large for first load
+- Webcam quality and lighting variance can reduce wink reliability
+- Natural blinking may create false positives if thresholds are too low
+- PDF worker asset size affects build and first interaction time
 
--   **Client-Side Processing:** All sensitive data (webcam feed) remains within the user's browser. No data is sent to a backend server for processing or storage.
--   **Permissions:** Webcam access requires explicit user permission, managed by the browser.
--   **Local Storage:** Only non-sensitive, transient data (like the PDF itself for active viewing) will be stored locally. Users can clear browser data at any time.
+## Mitigations
+- Keep thresholds configurable in UI
+- Enforce cooldown to suppress repeated triggers
+- Later add lazy loading for MediaPipe/PDF heavy assets
+- Add calibration flow before expanding beyond MVP
 
-## 6. Development Environment & Tools
+## Testing strategy
+Automated tests currently focus on the portable core:
+- gesture detection logic
+- navigation state updates
+- test scenario coverage
 
--   **Text Editor/IDE:** VS Code.
--   **Package Management:** npm/yarn (for PDF.js and any face tracking library).
--   **Build Tool:** Webpack/Rollup (for bundling and optimization).
--   **Linting/Formatting:** ESLint, Prettier.
+Manual/browser validation covers:
+- PDF upload and render
+- webcam permission handling
+- gesture runtime behavior
+- threshold tuning behavior
+
+## Future architecture upgrades
+- Extract `src/core` into a package
+- Add calibration storage and profile persistence
+- Add feature-flagged document modes (sheet music / paper / presenter)
+- Add browser E2E tests for smoke coverage
+- Lazy load MediaPipe and PDF worker assets
