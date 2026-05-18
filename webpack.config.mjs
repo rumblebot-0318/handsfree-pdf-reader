@@ -4,6 +4,7 @@ import HtmlWebpackPlugin from 'html-webpack-plugin'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
+const publicPath = process.env.PUBLIC_PATH || '/'
 
 export default {
   entry: './src/main.tsx',
@@ -11,7 +12,7 @@ export default {
     path: path.resolve(__dirname, 'dist'),
     filename: 'bundle.[contenthash].js',
     clean: true,
-    publicPath: '/',
+    publicPath,
   },
   resolve: {
     extensions: ['.tsx', '.ts', '.js'],

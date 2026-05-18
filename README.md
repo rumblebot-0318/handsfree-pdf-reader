@@ -109,6 +109,17 @@ flowchart TB
    npm run build
    ```
 
+## GitHub Pages deployment
+- This repo is configured to deploy from GitHub Actions.
+- Production build uses `PUBLIC_PATH=/handsfree-pdf-reader/` for Pages asset routing.
+- After the workflow runs, the expected URL is:
+  - `https://rumblebot-0318.github.io/handsfree-pdf-reader/`
+
+### Notes for Pages
+- HTTPS is available, so webcam access can work.
+- Gesture runtime still depends on external MediaPipe model/wasm loading and browser camera permissions.
+- If Pages works but gesture startup fails, inspect browser console/network requests first.
+
 ## Notes
 - The current goal is a **web MVP with portable core logic**, not a shared monorepo yet.
 - When mobile work starts, move `src/core` and `src/types` into a reusable package boundary.
