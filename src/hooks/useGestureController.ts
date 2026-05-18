@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { FaceLandmarker } from '@mediapipe/tasks-vision'
+import type { FaceMesh } from '@mediapipe/face_mesh'
 import { DEFAULT_GESTURE_CONFIG } from '../core/defaults'
 import { inferGesture } from '../core/gesture-engine'
-import { createDesktopMediaPipeDetector, isMobileDevice, selectGestureProvider } from '../lib/gesture-provider'
+import { createDesktopMediaPipeDetector, createMobileFaceMeshDetector, isMobileDevice, selectGestureProvider } from '../lib/gesture-provider'
 import type { GestureConfig, GestureEvent } from '../types'
 
 type InitStage = 'idle' | 'camera-starting' | 'camera-live' | 'vision-loading' | 'vision-live' | 'vision-failed'
+type Detector = FaceLandmarker | FaceMesh
 
 function normalizeMediaError(err: unknown) {
   if (!(err instanceof Error)) return 'Failed to start gesture control'
@@ -60,7 +62,7 @@ async function requestCameraStream() {
 export function useGestureController(onGesture: (event: GestureEvent) => void) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const rafRef = useRef<number | null>(null)
-  const detectorRef = useRef<FaceLandmarker | null>(null)
+  const detectorRef = useRef<Detector | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const lastTriggeredAtRef = useRef(0)
   const detectEveryMsRef = useRef(isMobileDevice() ? 160 : 0)
@@ -86,6 +88,20 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
     setInitStage('idle')
   }, [])
 
+  const handleLandmarks = useCallback((landmarks?: { x: number; y: number }[]) => {
+    if (!landmarks) return
+    const gesture = inferGesture({
+      landmarks,
+      config,
+      lastTriggeredAt: lastTriggeredAtRef.current,
+    })
+    if (gesture && gesture.action !== 'none') {
+      lastTriggeredAtRef.current = gesture.timestamp
+      setLastGesture(gesture)
+      onGesture(gesture)
+    }
+  }, [config, onGesture])
+
   const detectLoop = useCallback(() => {
     const video = videoRef.current
     const detector = detectorRef.current
@@ -101,23 +117,19 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
     }
     lastDetectionAtRef.current = now
 
-    const result = detector.detectForVideo(video, now)
-    const landmarks = result.faceLandmarks?.[0]
-    if (landmarks) {
-      const gesture = inferGesture({
-        landmarks,
-        config,
-        lastTriggeredAt: lastTriggeredAtRef.current,
-      })
-      if (gesture && gesture.action !== 'none') {
-        lastTriggeredAtRef.current = gesture.timestamp
-        setLastGesture(gesture)
-        onGesture(gesture)
-      }
+    if ('detectForVideo' in detector) {
+      const result = detector.detectForVideo(video, now)
+      handleLandmarks(result.faceLandmarks?.[0])
+      rafRef.current = requestAnimationFrame(detectLoop)
+      return
     }
 
-    rafRef.current = requestAnimationFrame(detectLoop)
-  }, [config, onGesture])
+    detector.send({ image: video }).then(() => {
+      rafRef.current = requestAnimationFrame(detectLoop)
+    }).catch(() => {
+      rafRef.current = requestAnimationFrame(detectLoop)
+    })
+  }, [handleLandmarks])
 
   const start = useCallback(async () => {
     if (isRunning) return
@@ -139,14 +151,20 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
 
       try {
         const provider = selectGestureProvider()
-        if (provider === 'mobile-unsupported') {
-          setInitStage('vision-failed')
-          setError('Camera is live, but mobile gesture tracking is temporarily disabled on this device. Please use desktop Chrome for gesture control for now.')
-          return
+        setInitStage('vision-loading')
+
+        if (provider === 'mobile-face-mesh') {
+          if (!detectorRef.current) {
+            const mobileDetector = await createMobileFaceMeshDetector()
+            mobileDetector.onResults((results) => {
+              handleLandmarks(results.multiFaceLandmarks?.[0])
+            })
+            detectorRef.current = mobileDetector
+          }
+        } else {
+          detectorRef.current ??= await createDesktopMediaPipeDetector()
         }
 
-        setInitStage('vision-loading')
-        detectorRef.current ??= await createDesktopMediaPipeDetector()
         setInitStage('vision-live')
         rafRef.current = requestAnimationFrame(detectLoop)
       } catch (visionError) {
