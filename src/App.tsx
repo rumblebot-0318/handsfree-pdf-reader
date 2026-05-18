@@ -52,6 +52,7 @@ export default function App() {
             videoRef={gesture.videoRef}
             running={gesture.isRunning}
             error={gesture.error}
+            initStage={gesture.initStage}
             lastGesture={gesture.lastGesture}
           />
         </div>
