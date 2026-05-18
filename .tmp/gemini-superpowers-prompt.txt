@@ -1,0 +1,33 @@
+Use the installed Superpowers extension and its workflow discipline to produce planning artifacts for a new software product.
+
+Product name: handsfree-pdf-reader
+Concept: A browser-based hands-free PDF reader that uses webcam-based wink detection and head/nose direction to turn pages or scroll, positioned as a browser-first alternative to foot pedals and app-only solutions.
+
+Target users:
+- Musicians reading sheet music
+- Heavy PDF readers (researchers, students, professionals)
+- Presenters
+- Accessibility users needing hands-free navigation
+
+Differentiators:
+- Browser-first
+- Local-first privacy (camera processing on-device/in-browser)
+- Fast calibration for per-user personalization
+- Document-specific modes (sheet music, paper reading, presentation)
+
+Create exactly these files under docs/ in the current repository:
+1) PRD.md
+2) WIREFRAMES.md
+3) ARCHITECTURE.md
+4) IMPLEMENTATION_PLAN.md
+
+Document requirements:
+- Practical, buildable MVP
+- Clear problem statement, goals, non-goals
+- Requirements, constraints, risks, metrics
+- Consistent terminology across all files
+- Wireframes should be text-based / ASCII-friendly
+- Architecture should cover frontend, PDF rendering, vision pipeline, state, privacy model, telemetry, deployment, and future extensibility
+- Implementation plan should include phases, tasks, dependencies, acceptance criteria, and suggested milestones
+
+After creating the files, print a concise summary of what you created.
