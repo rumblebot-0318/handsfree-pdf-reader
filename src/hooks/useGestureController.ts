@@ -1,18 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { FilesetResolver, FaceLandmarker } from '@mediapipe/tasks-vision'
+import type { FaceLandmarker } from '@mediapipe/tasks-vision'
 import { DEFAULT_GESTURE_CONFIG } from '../core/defaults'
 import { inferGesture } from '../core/gesture-engine'
+import { createDesktopMediaPipeDetector, isMobileDevice, selectGestureProvider } from '../lib/gesture-provider'
 import type { GestureConfig, GestureEvent } from '../types'
 
-const VISION_BASE = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm'
-const MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task'
-const MOBILE_MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task'
-
 type InitStage = 'idle' | 'camera-starting' | 'camera-live' | 'vision-loading' | 'vision-live' | 'vision-failed'
-
-function isMobileDevice() {
-  return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
-}
 
 function normalizeMediaError(err: unknown) {
   if (!(err instanceof Error)) return 'Failed to start gesture control'
@@ -29,42 +22,6 @@ function normalizeVisionError(err: unknown) {
   if (/fetch|network|failed to fetch/i.test(err.message)) return 'Gesture model assets could not be downloaded on this network.'
   if (/memory|heap|allocation|wasm/i.test(err.message)) return 'Gesture model ran out of device memory or WebAssembly resources.'
   return err.message || 'Gesture model failed to initialize.'
-}
-
-async function loadVisionDetector() {
-  const mobile = isMobileDevice()
-  const vision = await FilesetResolver.forVisionTasks(VISION_BASE)
-  const attempts = [
-    {
-      baseOptions: { modelAssetPath: mobile ? MOBILE_MODEL_URL : MODEL_URL },
-      runningMode: 'VIDEO' as const,
-      numFaces: 1,
-      outputFaceBlendshapes: false,
-      minFaceDetectionConfidence: mobile ? 0.35 : 0.5,
-      minFacePresenceConfidence: mobile ? 0.35 : 0.5,
-      minTrackingConfidence: mobile ? 0.35 : 0.5,
-    },
-    {
-      baseOptions: { modelAssetPath: MODEL_URL },
-      runningMode: 'VIDEO' as const,
-      numFaces: 1,
-      outputFaceBlendshapes: false,
-      minFaceDetectionConfidence: 0.2,
-      minFacePresenceConfidence: 0.2,
-      minTrackingConfidence: 0.2,
-    },
-  ]
-
-  let lastError: unknown = null
-  for (const options of attempts) {
-    try {
-      return await FaceLandmarker.createFromOptions(vision, options)
-    } catch (err) {
-      lastError = err
-    }
-  }
-
-  throw lastError
 }
 
 async function requestCameraStream() {
@@ -181,8 +138,15 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
       setInitStage('camera-live')
 
       try {
+        const provider = selectGestureProvider()
+        if (provider === 'mobile-unsupported') {
+          setInitStage('vision-failed')
+          setError('Camera is live, but mobile gesture tracking is temporarily disabled on this device. Please use desktop Chrome for gesture control for now.')
+          return
+        }
+
         setInitStage('vision-loading')
-        detectorRef.current ??= await loadVisionDetector()
+        detectorRef.current ??= await createDesktopMediaPipeDetector()
         setInitStage('vision-live')
         rafRef.current = requestAnimationFrame(detectLoop)
       } catch (visionError) {
