@@ -6,6 +6,7 @@ import type { GestureConfig, GestureEvent } from '../types'
 
 const VISION_BASE = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm'
 const MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task'
+const MOBILE_MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task'
 
 type InitStage = 'idle' | 'camera-starting' | 'camera-live' | 'vision-loading' | 'vision-live' | 'vision-failed'
 
@@ -19,7 +20,51 @@ function normalizeMediaError(err: unknown) {
   if (err.name === 'NotReadableError') return 'Camera is busy in another app or tab.'
   if (err.name === 'OverconstrainedError') return 'Requested camera settings are not supported on this device.'
   if (err.name === 'NotFoundError') return 'No compatible camera was found on this device.'
+  if (err.name === 'AbortError') return 'Camera startup was interrupted by the browser.'
   return err.message || 'Failed to start gesture control'
+}
+
+function normalizeVisionError(err: unknown) {
+  if (!(err instanceof Error)) return 'Gesture model failed to initialize.'
+  if (/fetch|network|failed to fetch/i.test(err.message)) return 'Gesture model assets could not be downloaded on this network.'
+  if (/memory|heap|allocation|wasm/i.test(err.message)) return 'Gesture model ran out of device memory or WebAssembly resources.'
+  return err.message || 'Gesture model failed to initialize.'
+}
+
+async function loadVisionDetector() {
+  const mobile = isMobileDevice()
+  const vision = await FilesetResolver.forVisionTasks(VISION_BASE)
+  const attempts = [
+    {
+      baseOptions: { modelAssetPath: mobile ? MOBILE_MODEL_URL : MODEL_URL },
+      runningMode: 'VIDEO' as const,
+      numFaces: 1,
+      outputFaceBlendshapes: false,
+      minFaceDetectionConfidence: mobile ? 0.35 : 0.5,
+      minFacePresenceConfidence: mobile ? 0.35 : 0.5,
+      minTrackingConfidence: mobile ? 0.35 : 0.5,
+    },
+    {
+      baseOptions: { modelAssetPath: MODEL_URL },
+      runningMode: 'VIDEO' as const,
+      numFaces: 1,
+      outputFaceBlendshapes: false,
+      minFaceDetectionConfidence: 0.2,
+      minFacePresenceConfidence: 0.2,
+      minTrackingConfidence: 0.2,
+    },
+  ]
+
+  let lastError: unknown = null
+  for (const options of attempts) {
+    try {
+      return await FaceLandmarker.createFromOptions(vision, options)
+    } catch (err) {
+      lastError = err
+    }
+  }
+
+  throw lastError
 }
 
 async function requestCameraStream() {
@@ -61,6 +106,8 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
   const detectorRef = useRef<FaceLandmarker | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const lastTriggeredAtRef = useRef(0)
+  const detectEveryMsRef = useRef(isMobileDevice() ? 160 : 0)
+  const lastDetectionAtRef = useRef(0)
 
   const [config, setConfig] = useState<GestureConfig>(DEFAULT_GESTURE_CONFIG)
   const [isRunning, setIsRunning] = useState(false)
@@ -90,7 +137,14 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
       return
     }
 
-    const result = detector.detectForVideo(video, performance.now())
+    const now = performance.now()
+    if (detectEveryMsRef.current > 0 && now - lastDetectionAtRef.current < detectEveryMsRef.current) {
+      rafRef.current = requestAnimationFrame(detectLoop)
+      return
+    }
+    lastDetectionAtRef.current = now
+
+    const result = detector.detectForVideo(video, now)
     const landmarks = result.faceLandmarks?.[0]
     if (landmarks) {
       const gesture = inferGesture({
@@ -128,18 +182,13 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
 
       try {
         setInitStage('vision-loading')
-        const vision = await FilesetResolver.forVisionTasks(VISION_BASE)
-        detectorRef.current ??= await FaceLandmarker.createFromOptions(vision, {
-          baseOptions: { modelAssetPath: MODEL_URL },
-          runningMode: 'VIDEO',
-          numFaces: 1,
-          outputFaceBlendshapes: false,
-        })
+        detectorRef.current ??= await loadVisionDetector()
         setInitStage('vision-live')
         rafRef.current = requestAnimationFrame(detectLoop)
       } catch (visionError) {
         setInitStage('vision-failed')
-        setError(`Camera is live, but gesture model failed to load. ${normalizeMediaError(visionError)}`)
+        detectEveryMsRef.current = 220
+        setError(`Camera is live, but gesture model failed to load. ${normalizeVisionError(visionError)}`)
       }
     } catch (err) {
       setError(normalizeMediaError(err))
