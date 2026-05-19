@@ -1,15 +1,15 @@
 import { FilesetResolver, FaceLandmarker } from '@mediapipe/tasks-vision'
-import * as faceLandmarksDetection from '@tensorflow-models/face-landmarks-detection'
+import * as faceDetection from '@tensorflow-models/face-detection'
 import '@tensorflow/tfjs-backend-webgl'
 import * as tf from '@tensorflow/tfjs-core'
 
 const VISION_BASE = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm'
 const MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task'
 
-export type GestureProviderKind = 'desktop-mediapipe' | 'mobile-tfjs'
+export type GestureProviderKind = 'desktop-mediapipe' | 'mobile-tfjs-face-detection'
 
 export interface MobileTfjsDetector {
-  estimateFaces(input: HTMLVideoElement): Promise<Array<{ keypoints: Array<{ x: number; y: number }> }>>
+  estimateFaces(input: HTMLVideoElement): Promise<Array<{ box?: { xMin: number; yMin: number; width: number; height: number } }>>
 }
 
 export function isMobileDevice() {
@@ -17,7 +17,7 @@ export function isMobileDevice() {
 }
 
 export function selectGestureProvider(): GestureProviderKind {
-  return isMobileDevice() ? 'mobile-tfjs' : 'desktop-mediapipe'
+  return isMobileDevice() ? 'mobile-tfjs-face-detection' : 'desktop-mediapipe'
 }
 
 export async function createDesktopMediaPipeDetector() {
@@ -38,11 +38,10 @@ export async function createMobileTfjsDetector(): Promise<MobileTfjsDetector> {
     try {
       await tf.setBackend(backend)
       await tf.ready()
-      return await faceLandmarksDetection.createDetector(faceLandmarksDetection.SupportedModels.MediaPipeFaceMesh, {
+      return await faceDetection.createDetector(faceDetection.SupportedModels.MediaPipeFaceDetector, {
         runtime: 'tfjs',
-        refineLandmarks: false,
+        modelType: 'short',
         maxFaces: 1,
-        detectorModelUrl: undefined,
       })
     } catch (err) {
       lastError = err

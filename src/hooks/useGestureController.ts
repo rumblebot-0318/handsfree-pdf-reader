@@ -76,6 +76,7 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
   const lastDetectionAtRef = useRef(0)
   const lastFaceCountRef = useRef(0)
   const lastKeypointCountRef = useRef(0)
+  const faceCenterHistoryRef = useRef<Array<{ x: number; at: number }>>([])
 
   const [config, setConfig] = useState<GestureConfig>(DEFAULT_GESTURE_CONFIG)
   const [isRunning, setIsRunning] = useState(false)
@@ -148,6 +149,51 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
     }
   }, [config, onGesture])
 
+  const handleFaceBox = useCallback((box?: { xMin: number; yMin: number; width: number; height: number }) => {
+    const video = videoRef.current
+    const width = video?.videoWidth ?? 1
+    const height = video?.videoHeight ?? 1
+
+    if (!box) {
+      setDebugLines((prev) => [
+        `facebox: unavailable video=${width}x${height} ready=${video?.readyState ?? 0} faces=${lastFaceCountRef.current}`,
+        ...prev.slice(0, 7),
+      ])
+      return
+    }
+
+    const now = Date.now()
+    const centerX = (box.xMin + box.width / 2) / width
+    const centerY = (box.yMin + box.height / 2) / height
+    faceCenterHistoryRef.current = [
+      ...faceCenterHistoryRef.current.filter((entry) => now - entry.at <= 3000),
+      { x: centerX, at: now },
+    ]
+    const baseline = faceCenterHistoryRef.current.reduce((sum, entry) => sum + entry.x, 0) / Math.max(faceCenterHistoryRef.current.length, 1)
+    const deltaX = centerX - baseline
+
+    let gesture: GestureEvent | null = null
+    if (now - lastTriggeredAtRef.current >= config.cooldownMs) {
+      if (deltaX > 0.12) {
+        gesture = { label: 'Head right (box)', action: 'next', confidence: Math.min(1, deltaX / 0.22), timestamp: now }
+      } else if (deltaX < -0.12) {
+        gesture = { label: 'Head left (box)', action: 'prev', confidence: Math.min(1, Math.abs(deltaX) / 0.22), timestamp: now }
+      }
+    }
+
+    const line = gesture
+      ? `boxGesture=${gesture.label} action=${gesture.action} conf=${gesture.confidence.toFixed(2)} center=(${centerX.toFixed(2)},${centerY.toFixed(2)}) baseline=${baseline.toFixed(2)} dx=${deltaX.toFixed(2)} faces=${lastFaceCountRef.current}`
+      : `boxGesture=none center=(${centerX.toFixed(2)},${centerY.toFixed(2)}) baseline=${baseline.toFixed(2)} dx=${deltaX.toFixed(2)} faces=${lastFaceCountRef.current}`
+
+    setDebugLines((prev) => [line, ...prev.slice(0, 7)])
+
+    if (gesture) {
+      lastTriggeredAtRef.current = gesture.timestamp
+      setLastGesture(gesture)
+      onGesture(gesture)
+    }
+  }, [config.cooldownMs, onGesture])
+
   const detectLoop = useCallback(() => {
     const video = videoRef.current
     const detector = detectorRef.current
@@ -175,18 +221,14 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
     detector.estimateFaces(video)
       .then((faces) => {
         lastFaceCountRef.current = faces.length
-        lastKeypointCountRef.current = faces[0]?.keypoints?.length ?? 0
-        const landmarks = faces[0]?.keypoints?.map((point) => ({
-          x: point.x / Math.max(video.videoWidth || 1, 1),
-          y: point.y / Math.max(video.videoHeight || 1, 1),
-        }))
-        handleLandmarks(landmarks)
+        lastKeypointCountRef.current = 0
+        handleFaceBox(faces[0]?.box)
         rafRef.current = requestAnimationFrame(detectLoop)
       })
       .catch(() => {
         rafRef.current = requestAnimationFrame(detectLoop)
       })
-  }, [handleLandmarks])
+  }, [handleFaceBox, handleLandmarks])
 
   const start = useCallback(async () => {
     if (isRunning) return
@@ -214,7 +256,7 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
         const provider = selectGestureProvider()
         setInitStage('vision-loading')
 
-        if (provider === 'mobile-tfjs') {
+        if (provider === 'mobile-tfjs-face-detection') {
           detectorRef.current ??= await createMobileTfjsDetector()
         } else {
           detectorRef.current ??= await createDesktopMediaPipeDetector()
