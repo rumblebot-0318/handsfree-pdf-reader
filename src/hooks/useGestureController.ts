@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { FaceLandmarker } from '@mediapipe/tasks-vision'
-import type { FaceMesh } from '@mediapipe/face_mesh'
 import { DEFAULT_GESTURE_CONFIG } from '../core/defaults'
 import { inferGesture } from '../core/gesture-engine'
-import { createDesktopMediaPipeDetector, createMobileFaceMeshDetector, isMobileDevice, selectGestureProvider } from '../lib/gesture-provider'
+import { createDesktopMediaPipeDetector, createMobileTfjsDetector, isMobileDevice, type MobileTfjsDetector, selectGestureProvider } from '../lib/gesture-provider'
 import type { GestureConfig, GestureEvent } from '../types'
 
 type InitStage = 'idle' | 'camera-starting' | 'camera-live' | 'vision-loading' | 'vision-live' | 'vision-failed'
-type Detector = FaceLandmarker | FaceMesh
+type Detector = FaceLandmarker | MobileTfjsDetector
 
 function normalizeMediaError(err: unknown) {
   if (!(err instanceof Error)) return 'Failed to start gesture control'
@@ -124,11 +123,18 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
       return
     }
 
-    detector.send({ image: video }).then(() => {
-      rafRef.current = requestAnimationFrame(detectLoop)
-    }).catch(() => {
-      rafRef.current = requestAnimationFrame(detectLoop)
-    })
+    detector.estimateFaces(video)
+      .then((faces) => {
+        const landmarks = faces[0]?.keypoints?.map((point) => ({
+          x: point.x / Math.max(video.videoWidth || 1, 1),
+          y: point.y / Math.max(video.videoHeight || 1, 1),
+        }))
+        handleLandmarks(landmarks)
+        rafRef.current = requestAnimationFrame(detectLoop)
+      })
+      .catch(() => {
+        rafRef.current = requestAnimationFrame(detectLoop)
+      })
   }, [handleLandmarks])
 
   const start = useCallback(async () => {
@@ -153,14 +159,8 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
         const provider = selectGestureProvider()
         setInitStage('vision-loading')
 
-        if (provider === 'mobile-face-mesh') {
-          if (!detectorRef.current) {
-            const mobileDetector = await createMobileFaceMeshDetector()
-            mobileDetector.onResults((results) => {
-              handleLandmarks(results.multiFaceLandmarks?.[0])
-            })
-            detectorRef.current = mobileDetector
-          }
+        if (provider === 'mobile-tfjs') {
+          detectorRef.current ??= await createMobileTfjsDetector()
         } else {
           detectorRef.current ??= await createDesktopMediaPipeDetector()
         }
