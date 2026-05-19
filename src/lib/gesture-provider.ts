@@ -9,7 +9,7 @@ const MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/face_landmark
 export type GestureProviderKind = 'desktop-mediapipe' | 'mobile-tfjs-face-detection'
 
 export interface MobileTfjsDetector {
-  estimateFaces(input: HTMLVideoElement): Promise<Array<{ box?: { xMin: number; yMin: number; width: number; height: number } }>>
+  estimateFaces(input: HTMLVideoElement | HTMLCanvasElement): Promise<Array<{ box?: { xMin: number; yMin: number; width: number; height: number } }>>
 }
 
 export function isMobileDevice() {

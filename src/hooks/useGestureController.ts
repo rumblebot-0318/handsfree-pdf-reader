@@ -71,6 +71,7 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
   const rafRef = useRef<number | null>(null)
   const detectorRef = useRef<Detector | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
+  const captureCanvasRef = useRef<HTMLCanvasElement | null>(null)
   const lastTriggeredAtRef = useRef(0)
   const detectEveryMsRef = useRef(isMobileDevice() ? 220 : 0)
   const lastDetectionAtRef = useRef(0)
@@ -272,17 +273,44 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
       return
     }
 
-    detector.estimateFaces(video)
+    const captureCanvas = captureCanvasRef.current ?? document.createElement('canvas')
+    captureCanvasRef.current = captureCanvas
+    const targetWidth = 320
+    const targetHeight = Math.max(240, Math.round(targetWidth * ((video.videoHeight || 480) / Math.max(video.videoWidth || 640, 1))))
+    captureCanvas.width = targetWidth
+    captureCanvas.height = targetHeight
+    const context = captureCanvas.getContext('2d', { willReadFrequently: true })
+
+    if (!context) {
+      setDebugLines((prev) => [`capture-canvas: no-2d-context`, ...prev.slice(0, 7)])
+      rafRef.current = requestAnimationFrame(detectLoop)
+      return
+    }
+
+    context.save()
+    context.clearRect(0, 0, targetWidth, targetHeight)
+    if (cameraFacingMode === 'user') {
+      context.translate(targetWidth, 0)
+      context.scale(-1, 1)
+    }
+    context.drawImage(video, 0, 0, targetWidth, targetHeight)
+    context.restore()
+
+    detector.estimateFaces(captureCanvas)
       .then((faces) => {
         lastFaceCountRef.current = faces.length
         lastKeypointCountRef.current = 0
+        setDebugLines((prev) => [
+          `capture=${targetWidth}x${targetHeight} faces=${faces.length}`,
+          ...prev.slice(0, 7),
+        ])
         handleFaceBox(faces[0]?.box)
         rafRef.current = requestAnimationFrame(detectLoop)
       })
       .catch(() => {
         rafRef.current = requestAnimationFrame(detectLoop)
       })
-  }, [handleFaceBox, handleLandmarks])
+  }, [cameraFacingMode, handleFaceBox, handleLandmarks])
 
   const start = useCallback(async () => {
     if (isRunning) return
