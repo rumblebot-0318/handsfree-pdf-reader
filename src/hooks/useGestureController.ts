@@ -72,6 +72,7 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [lastGesture, setLastGesture] = useState<GestureEvent | null>(null)
+  const [debugLines, setDebugLines] = useState<string[]>([])
   const [initStage, setInitStage] = useState<InitStage>('idle')
 
   const stop = useCallback(() => {
@@ -88,12 +89,43 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
   }, [])
 
   const handleLandmarks = useCallback((landmarks?: { x: number; y: number }[]) => {
-    if (!landmarks) return
+    if (!landmarks || landmarks.length < 468) {
+      setDebugLines((prev) => [
+        'landmarks: unavailable',
+        ...prev.slice(0, 5),
+      ])
+      return
+    }
+
+    const leftEye = [33, 160, 158, 133, 153, 144].map((i) => landmarks[i])
+    const rightEye = [362, 385, 387, 263, 373, 380].map((i) => landmarks[i])
+    const leftCheek = landmarks[234]
+    const rightCheek = landmarks[454]
+    const nose = landmarks[1]
+    const distance = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.hypot(a.x - b.x, a.y - b.y)
+    const eyeRatio = (points: { x: number; y: number }[]) => {
+      const vertical = distance(points[1], points[5]) + distance(points[2], points[4])
+      const horizontal = 2 * distance(points[0], points[3])
+      return horizontal === 0 ? 1 : vertical / horizontal
+    }
+    const leftRatio = eyeRatio(leftEye)
+    const rightRatio = eyeRatio(rightEye)
+    const faceCenterX = (leftCheek.x + rightCheek.x) / 2
+    const faceWidth = Math.abs(rightCheek.x - leftCheek.x) || 1
+    const yaw = (nose.x - faceCenterX) / faceWidth
+
     const gesture = inferGesture({
       landmarks,
       config,
       lastTriggeredAt: lastTriggeredAtRef.current,
     })
+
+    const line = gesture
+      ? `gesture=${gesture.label} action=${gesture.action} conf=${gesture.confidence.toFixed(2)} leftEye=${leftRatio.toFixed(2)} rightEye=${rightRatio.toFixed(2)} yaw=${yaw.toFixed(2)}`
+      : `gesture=none leftEye=${leftRatio.toFixed(2)} rightEye=${rightRatio.toFixed(2)} yaw=${yaw.toFixed(2)}`
+
+    setDebugLines((prev) => [line, ...prev.slice(0, 7)])
+
     if (gesture && gesture.action !== 'none') {
       lastTriggeredAtRef.current = gesture.timestamp
       setLastGesture(gesture)
@@ -184,8 +216,8 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
   useEffect(() => stop, [stop])
 
   const controls = useMemo(
-    () => ({ config, setConfig, isRunning, isLoading, error, lastGesture, start, stop, initStage }),
-    [config, isRunning, isLoading, error, lastGesture, start, stop, initStage],
+    () => ({ config, setConfig, isRunning, isLoading, error, lastGesture, debugLines, start, stop, initStage }),
+    [config, isRunning, isLoading, error, lastGesture, debugLines, start, stop, initStage],
   )
 
   return { videoRef, ...controls }
