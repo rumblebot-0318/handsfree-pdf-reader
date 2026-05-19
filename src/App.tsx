@@ -45,8 +45,10 @@ export default function App() {
             onFileSelect={openFile}
             webcamRunning={gesture.isRunning}
             webcamLoading={gesture.isLoading}
+            cameraFacingMode={gesture.cameraFacingMode}
             onStartWebcam={gesture.start}
             onStopWebcam={gesture.stop}
+            onSwitchCamera={gesture.switchCamera}
           />
           <WebcamPanel
             videoRef={gesture.videoRef}

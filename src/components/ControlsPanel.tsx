@@ -7,8 +7,10 @@ interface ControlsPanelProps {
   onFileSelect: (file: File) => void
   webcamRunning: boolean
   webcamLoading: boolean
+  cameraFacingMode: 'user' | 'environment'
   onStartWebcam: () => void
   onStopWebcam: () => void
+  onSwitchCamera: () => void
 }
 
 export function ControlsPanel(props: ControlsPanelProps) {
@@ -35,6 +37,9 @@ export function ControlsPanel(props: ControlsPanelProps) {
         </button>
         <button className="button button--secondary" onClick={props.onStopWebcam} disabled={!props.webcamRunning}>
           Stop webcam
+        </button>
+        <button className="button button--secondary" onClick={props.onSwitchCamera}>
+          Switch camera ({props.cameraFacingMode})
         </button>
       </div>
 

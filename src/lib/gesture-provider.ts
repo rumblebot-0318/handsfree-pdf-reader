@@ -31,12 +31,23 @@ export async function createDesktopMediaPipeDetector() {
 }
 
 export async function createMobileTfjsDetector(): Promise<MobileTfjsDetector> {
-  await tf.setBackend('webgl')
-  await tf.ready()
+  const backends = ['webgl', 'cpu'] as const
+  let lastError: unknown = null
 
-  return faceLandmarksDetection.createDetector(faceLandmarksDetection.SupportedModels.MediaPipeFaceMesh, {
-    runtime: 'tfjs',
-    refineLandmarks: false,
-    maxFaces: 1,
-  })
+  for (const backend of backends) {
+    try {
+      await tf.setBackend(backend)
+      await tf.ready()
+      return await faceLandmarksDetection.createDetector(faceLandmarksDetection.SupportedModels.MediaPipeFaceMesh, {
+        runtime: 'tfjs',
+        refineLandmarks: false,
+        maxFaces: 1,
+        detectorModelUrl: undefined,
+      })
+    } catch (err) {
+      lastError = err
+    }
+  }
+
+  throw lastError
 }

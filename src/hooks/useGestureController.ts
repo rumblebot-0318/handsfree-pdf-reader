@@ -25,12 +25,20 @@ function normalizeVisionError(err: unknown) {
   return err.message || 'Gesture model failed to initialize.'
 }
 
-async function requestCameraStream() {
+async function requestCameraStream(facingMode: 'user' | 'environment') {
   const mobile = isMobileDevice()
   const attempts: MediaStreamConstraints[] = [
     {
       video: {
-        facingMode: 'user',
+        facingMode,
+        width: { ideal: mobile ? 960 : 960 },
+        height: { ideal: mobile ? 720 : 540 },
+      },
+      audio: false,
+    },
+    {
+      video: {
+        facingMode,
         width: { ideal: mobile ? 640 : 960 },
         height: { ideal: mobile ? 480 : 540 },
       },
@@ -75,6 +83,7 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
   const [error, setError] = useState<string | null>(null)
   const [lastGesture, setLastGesture] = useState<GestureEvent | null>(null)
   const [debugLines, setDebugLines] = useState<string[]>([])
+  const [cameraFacingMode, setCameraFacingMode] = useState<'user' | 'environment'>('user')
   const [initStage, setInitStage] = useState<InitStage>('idle')
 
   const stop = useCallback(() => {
@@ -186,7 +195,7 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
     setInitStage('camera-starting')
 
     try {
-      const stream = await requestCameraStream()
+      const stream = await requestCameraStream(cameraFacingMode)
       streamRef.current = stream
 
       if (!videoRef.current) throw new Error('Video element unavailable')
@@ -225,13 +234,25 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
     } finally {
       setIsLoading(false)
     }
-  }, [detectLoop, isRunning])
+  }, [cameraFacingMode, detectLoop, isRunning])
 
   useEffect(() => stop, [stop])
 
+  const switchCamera = useCallback(() => {
+    const nextMode = cameraFacingMode === 'user' ? 'environment' : 'user'
+    setCameraFacingMode(nextMode)
+    setDebugLines((prev) => [`camera facing mode switched to ${nextMode}`, ...prev.slice(0, 7)])
+    if (isRunning) {
+      stop()
+      window.setTimeout(() => {
+        void Promise.resolve().then(() => start())
+      }, 150)
+    }
+  }, [cameraFacingMode, isRunning, start, stop])
+
   const controls = useMemo(
-    () => ({ config, setConfig, isRunning, isLoading, error, lastGesture, debugLines, start, stop, initStage }),
-    [config, isRunning, isLoading, error, lastGesture, debugLines, start, stop, initStage],
+    () => ({ config, setConfig, isRunning, isLoading, error, lastGesture, debugLines, start, stop, initStage, cameraFacingMode, switchCamera }),
+    [config, isRunning, isLoading, error, lastGesture, debugLines, start, stop, initStage, cameraFacingMode, switchCamera],
   )
 
   return { videoRef, ...controls }
