@@ -149,12 +149,12 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
     }
   }, [config, onGesture])
 
-  const handleFaceBox = useCallback((box?: { xMin: number; yMin: number; width: number; height: number }) => {
+  const handleFaceBox = useCallback((box?: unknown) => {
     const video = videoRef.current
     const width = video?.videoWidth ?? 1
     const height = video?.videoHeight ?? 1
 
-    if (!box) {
+    if (!box || typeof box !== 'object') {
       setDebugLines((prev) => [
         `facebox: unavailable video=${width}x${height} ready=${video?.readyState ?? 0} faces=${lastFaceCountRef.current}`,
         ...prev.slice(0, 7),
@@ -162,9 +162,63 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
       return
     }
 
+    const raw = box as Record<string, unknown>
+    let xMin = 0
+    let yMin = 0
+    let boxWidth = 0
+    let boxHeight = 0
+
+    if (typeof raw.xMin === 'number' && typeof raw.yMin === 'number' && typeof raw.width === 'number' && typeof raw.height === 'number') {
+      xMin = raw.xMin
+      yMin = raw.yMin
+      boxWidth = raw.width
+      boxHeight = raw.height
+    } else if (Array.isArray(raw.topLeft) && Array.isArray(raw.bottomRight)) {
+      const [x1, y1] = raw.topLeft as number[]
+      const [x2, y2] = raw.bottomRight as number[]
+      xMin = x1
+      yMin = y1
+      boxWidth = x2 - x1
+      boxHeight = y2 - y1
+    } else if (
+      typeof raw.xCenter === 'number' &&
+      typeof raw.yCenter === 'number' &&
+      typeof raw.width === 'number' &&
+      typeof raw.height === 'number'
+    ) {
+      boxWidth = raw.width
+      boxHeight = raw.height
+      xMin = raw.xCenter - boxWidth / 2
+      yMin = raw.yCenter - boxHeight / 2
+    } else if (
+      raw.topLeft &&
+      raw.bottomRight &&
+      typeof raw.topLeft === 'object' &&
+      typeof raw.bottomRight === 'object'
+    ) {
+      const topLeft = raw.topLeft as Record<string, number>
+      const bottomRight = raw.bottomRight as Record<string, number>
+      const x1 = Number(topLeft.x ?? topLeft[0] ?? 0)
+      const y1 = Number(topLeft.y ?? topLeft[1] ?? 0)
+      const x2 = Number(bottomRight.x ?? bottomRight[0] ?? 0)
+      const y2 = Number(bottomRight.y ?? bottomRight[1] ?? 0)
+      xMin = x1
+      yMin = y1
+      boxWidth = x2 - x1
+      boxHeight = y2 - y1
+    }
+
+    if (!boxWidth || !boxHeight) {
+      setDebugLines((prev) => [
+        `facebox: parse-failed keys=${Object.keys(raw).join(',')} raw=${JSON.stringify(raw).slice(0, 140)}`,
+        ...prev.slice(0, 7),
+      ])
+      return
+    }
+
     const now = Date.now()
-    const centerX = (box.xMin + box.width / 2) / width
-    const centerY = (box.yMin + box.height / 2) / height
+    const centerX = (xMin + boxWidth / 2) / width
+    const centerY = (yMin + boxHeight / 2) / height
     faceCenterHistoryRef.current = [
       ...faceCenterHistoryRef.current.filter((entry) => now - entry.at <= 3000),
       { x: centerX, at: now },
@@ -182,8 +236,8 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
     }
 
     const line = gesture
-      ? `boxGesture=${gesture.label} action=${gesture.action} conf=${gesture.confidence.toFixed(2)} center=(${centerX.toFixed(2)},${centerY.toFixed(2)}) baseline=${baseline.toFixed(2)} dx=${deltaX.toFixed(2)} faces=${lastFaceCountRef.current}`
-      : `boxGesture=none center=(${centerX.toFixed(2)},${centerY.toFixed(2)}) baseline=${baseline.toFixed(2)} dx=${deltaX.toFixed(2)} faces=${lastFaceCountRef.current}`
+      ? `boxGesture=${gesture.label} action=${gesture.action} conf=${gesture.confidence.toFixed(2)} center=(${centerX.toFixed(2)},${centerY.toFixed(2)}) baseline=${baseline.toFixed(2)} dx=${deltaX.toFixed(2)} box=(${xMin.toFixed(0)},${yMin.toFixed(0)},${boxWidth.toFixed(0)},${boxHeight.toFixed(0)}) faces=${lastFaceCountRef.current}`
+      : `boxGesture=none center=(${centerX.toFixed(2)},${centerY.toFixed(2)}) baseline=${baseline.toFixed(2)} dx=${deltaX.toFixed(2)} box=(${xMin.toFixed(0)},${yMin.toFixed(0)},${boxWidth.toFixed(0)},${boxHeight.toFixed(0)}) faces=${lastFaceCountRef.current}`
 
     setDebugLines((prev) => [line, ...prev.slice(0, 7)])
 
