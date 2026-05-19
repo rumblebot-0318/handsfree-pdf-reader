@@ -64,8 +64,10 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
   const detectorRef = useRef<Detector | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const lastTriggeredAtRef = useRef(0)
-  const detectEveryMsRef = useRef(isMobileDevice() ? 160 : 0)
+  const detectEveryMsRef = useRef(isMobileDevice() ? 220 : 0)
   const lastDetectionAtRef = useRef(0)
+  const lastFaceCountRef = useRef(0)
+  const lastKeypointCountRef = useRef(0)
 
   const [config, setConfig] = useState<GestureConfig>(DEFAULT_GESTURE_CONFIG)
   const [isRunning, setIsRunning] = useState(false)
@@ -90,9 +92,13 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
 
   const handleLandmarks = useCallback((landmarks?: { x: number; y: number }[]) => {
     if (!landmarks || landmarks.length < 468) {
+      const video = videoRef.current
+      const width = video?.videoWidth ?? 0
+      const height = video?.videoHeight ?? 0
+      const readyState = video?.readyState ?? 0
       setDebugLines((prev) => [
-        'landmarks: unavailable',
-        ...prev.slice(0, 5),
+        `landmarks: unavailable video=${width}x${height} ready=${readyState} faces=${lastFaceCountRef.current} keypoints=${lastKeypointCountRef.current}`,
+        ...prev.slice(0, 7),
       ])
       return
     }
@@ -121,8 +127,8 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
     })
 
     const line = gesture
-      ? `gesture=${gesture.label} action=${gesture.action} conf=${gesture.confidence.toFixed(2)} leftEye=${leftRatio.toFixed(2)} rightEye=${rightRatio.toFixed(2)} yaw=${yaw.toFixed(2)}`
-      : `gesture=none leftEye=${leftRatio.toFixed(2)} rightEye=${rightRatio.toFixed(2)} yaw=${yaw.toFixed(2)}`
+      ? `gesture=${gesture.label} action=${gesture.action} conf=${gesture.confidence.toFixed(2)} leftEye=${leftRatio.toFixed(2)} rightEye=${rightRatio.toFixed(2)} yaw=${yaw.toFixed(2)} faces=${lastFaceCountRef.current} keypoints=${landmarks.length}`
+      : `gesture=none leftEye=${leftRatio.toFixed(2)} rightEye=${rightRatio.toFixed(2)} yaw=${yaw.toFixed(2)} faces=${lastFaceCountRef.current} keypoints=${landmarks.length}`
 
     setDebugLines((prev) => [line, ...prev.slice(0, 7)])
 
@@ -150,6 +156,8 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
 
     if ('detectForVideo' in detector) {
       const result = detector.detectForVideo(video, now)
+      lastFaceCountRef.current = result.faceLandmarks?.length ?? 0
+      lastKeypointCountRef.current = result.faceLandmarks?.[0]?.length ?? 0
       handleLandmarks(result.faceLandmarks?.[0])
       rafRef.current = requestAnimationFrame(detectLoop)
       return
@@ -157,6 +165,8 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
 
     detector.estimateFaces(video)
       .then((faces) => {
+        lastFaceCountRef.current = faces.length
+        lastKeypointCountRef.current = faces[0]?.keypoints?.length ?? 0
         const landmarks = faces[0]?.keypoints?.map((point) => ({
           x: point.x / Math.max(video.videoWidth || 1, 1),
           y: point.y / Math.max(video.videoHeight || 1, 1),
@@ -184,8 +194,12 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
       videoRef.current.muted = true
       videoRef.current.playsInline = true
       await videoRef.current.play()
+      await new Promise((resolve) => window.setTimeout(resolve, isMobileDevice() ? 800 : 200))
       setIsRunning(true)
       setInitStage('camera-live')
+      setDebugLines([
+        `camera live video=${videoRef.current.videoWidth || 0}x${videoRef.current.videoHeight || 0} ready=${videoRef.current.readyState}`,
+      ])
 
       try {
         const provider = selectGestureProvider()
