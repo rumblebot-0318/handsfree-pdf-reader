@@ -78,6 +78,7 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
   const lastFaceCountRef = useRef(0)
   const lastKeypointCountRef = useRef(0)
   const faceCenterHistoryRef = useRef<Array<{ x: number; at: number }>>([])
+  const pointerBaselineRef = useRef<number | null>(null)
 
   const [config, setConfig] = useState<GestureConfig>(DEFAULT_GESTURE_CONFIG)
   const [isRunning, setIsRunning] = useState(false)
@@ -86,6 +87,7 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
   const [lastGesture, setLastGesture] = useState<GestureEvent | null>(null)
   const [debugLines, setDebugLines] = useState<string[]>([])
   const [cameraFacingMode, setCameraFacingMode] = useState<'user' | 'environment'>('user')
+  const [pointerGuide, setPointerGuide] = useState<{ centerX: number; baseline: number; leftTarget: number; rightTarget: number } | null>(null)
   const [initStage, setInitStage] = useState<InitStage>('idle')
 
   const stop = useCallback(() => {
@@ -224,26 +226,38 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
       ...faceCenterHistoryRef.current.filter((entry) => now - entry.at <= 3000),
       { x: centerX, at: now },
     ]
-    const baseline = faceCenterHistoryRef.current.reduce((sum, entry) => sum + entry.x, 0) / Math.max(faceCenterHistoryRef.current.length, 1)
+
+    if (pointerBaselineRef.current === null) {
+      pointerBaselineRef.current = centerX
+    } else {
+      pointerBaselineRef.current = pointerBaselineRef.current * 0.92 + centerX * 0.08
+    }
+
+    const baseline = pointerBaselineRef.current
     const deltaX = centerX - baseline
+    const leftTarget = baseline - 0.14
+    const rightTarget = baseline + 0.14
 
     let gesture: GestureEvent | null = null
     if (now - lastTriggeredAtRef.current >= config.cooldownMs) {
-      if (deltaX > 0.12) {
-        gesture = { label: 'Head right (box)', action: 'next', confidence: Math.min(1, deltaX / 0.22), timestamp: now }
-      } else if (deltaX < -0.12) {
-        gesture = { label: 'Head left (box)', action: 'prev', confidence: Math.min(1, Math.abs(deltaX) / 0.22), timestamp: now }
+      if (centerX >= rightTarget) {
+        gesture = { label: 'Head right (target)', action: 'next', confidence: Math.min(1, (centerX - baseline) / 0.24), timestamp: now }
+      } else if (centerX <= leftTarget) {
+        gesture = { label: 'Head left (target)', action: 'prev', confidence: Math.min(1, (baseline - centerX) / 0.24), timestamp: now }
       }
     }
 
+    setPointerGuide({ centerX, baseline, leftTarget, rightTarget })
+
     const line = gesture
-      ? `boxGesture=${gesture.label} action=${gesture.action} conf=${gesture.confidence.toFixed(2)} center=(${centerX.toFixed(2)},${centerY.toFixed(2)}) baseline=${baseline.toFixed(2)} dx=${deltaX.toFixed(2)} box=(${xMin.toFixed(0)},${yMin.toFixed(0)},${boxWidth.toFixed(0)},${boxHeight.toFixed(0)}) faces=${lastFaceCountRef.current}`
-      : `boxGesture=none center=(${centerX.toFixed(2)},${centerY.toFixed(2)}) baseline=${baseline.toFixed(2)} dx=${deltaX.toFixed(2)} box=(${xMin.toFixed(0)},${yMin.toFixed(0)},${boxWidth.toFixed(0)},${boxHeight.toFixed(0)}) faces=${lastFaceCountRef.current}`
+      ? `boxGesture=${gesture.label} action=${gesture.action} conf=${gesture.confidence.toFixed(2)} center=(${centerX.toFixed(2)},${centerY.toFixed(2)}) baseline=${baseline.toFixed(2)} leftTarget=${leftTarget.toFixed(2)} rightTarget=${rightTarget.toFixed(2)} dx=${deltaX.toFixed(2)} box=(${xMin.toFixed(0)},${yMin.toFixed(0)},${boxWidth.toFixed(0)},${boxHeight.toFixed(0)}) faces=${lastFaceCountRef.current}`
+      : `boxGesture=none center=(${centerX.toFixed(2)},${centerY.toFixed(2)}) baseline=${baseline.toFixed(2)} leftTarget=${leftTarget.toFixed(2)} rightTarget=${rightTarget.toFixed(2)} dx=${deltaX.toFixed(2)} box=(${xMin.toFixed(0)},${yMin.toFixed(0)},${boxWidth.toFixed(0)},${boxHeight.toFixed(0)}) faces=${lastFaceCountRef.current}`
 
     setDebugLines((prev) => [line, ...prev.slice(0, 7)])
 
     if (gesture) {
       lastTriggeredAtRef.current = gesture.timestamp
+      pointerBaselineRef.current = centerX
       setLastGesture(gesture)
       onGesture(gesture)
     }
@@ -375,8 +389,8 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
   }, [cameraFacingMode, isRunning, start, stop])
 
   const controls = useMemo(
-    () => ({ config, setConfig, isRunning, isLoading, error, lastGesture, debugLines, start, stop, initStage, cameraFacingMode, switchCamera }),
-    [config, isRunning, isLoading, error, lastGesture, debugLines, start, stop, initStage, cameraFacingMode, switchCamera],
+    () => ({ config, setConfig, isRunning, isLoading, error, lastGesture, debugLines, pointerGuide, start, stop, initStage, cameraFacingMode, switchCamera }),
+    [config, isRunning, isLoading, error, lastGesture, debugLines, pointerGuide, start, stop, initStage, cameraFacingMode, switchCamera],
   )
 
   return { videoRef, ...controls }

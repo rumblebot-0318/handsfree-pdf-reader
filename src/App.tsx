@@ -57,6 +57,7 @@ export default function App() {
             initStage={gesture.initStage}
             lastGesture={gesture.lastGesture}
             debugLines={gesture.debugLines}
+            pointerGuide={gesture.pointerGuide}
           />
         </div>
 

@@ -9,6 +9,7 @@ interface WebcamPanelProps {
   initStage: 'idle' | 'camera-starting' | 'camera-live' | 'vision-loading' | 'vision-live' | 'vision-failed'
   lastGesture: GestureEvent | null
   debugLines: string[]
+  pointerGuide: { centerX: number; baseline: number; leftTarget: number; rightTarget: number } | null
 }
 
 function describeStage(stage: WebcamPanelProps['initStage']) {
@@ -28,7 +29,7 @@ function describeStage(stage: WebcamPanelProps['initStage']) {
   }
 }
 
-export function WebcamPanel({ videoRef, running, error, initStage, lastGesture, debugLines }: WebcamPanelProps) {
+export function WebcamPanel({ videoRef, running, error, initStage, lastGesture, debugLines, pointerGuide }: WebcamPanelProps) {
   return (
     <section className="panel">
       <div className="panel__header panel__header--split">
@@ -41,6 +42,14 @@ export function WebcamPanel({ videoRef, running, error, initStage, lastGesture, 
 
       <div className="webcam-frame webcam-frame--debug">
         <video ref={videoRef} autoPlay muted playsInline />
+        {pointerGuide ? (
+          <div className="pointer-guide">
+            <div className="pointer-guide__line pointer-guide__line--left" style={{ left: `${pointerGuide.leftTarget * 100}%` }} />
+            <div className="pointer-guide__line pointer-guide__line--baseline" style={{ left: `${pointerGuide.baseline * 100}%` }} />
+            <div className="pointer-guide__line pointer-guide__line--right" style={{ left: `${pointerGuide.rightTarget * 100}%` }} />
+            <div className="pointer-guide__pointer" style={{ left: `${pointerGuide.centerX * 100}%` }} />
+          </div>
+        ) : null}
         <div className="webcam-debug-overlay">
           <strong>Gesture debug</strong>
           <div>stage: {describeStage(initStage)}</div>
