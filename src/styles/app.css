@@ -97,6 +97,13 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   background: rgba(84, 122, 255, 0.14);
   color: #c7d6ff;
 }
+.page-index-banner {
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(84, 122, 255, 0.1);
+  color: #dbe5ff;
+}
 .webcam-frame {
   aspect-ratio: 16 / 9;
   border-radius: 20px;

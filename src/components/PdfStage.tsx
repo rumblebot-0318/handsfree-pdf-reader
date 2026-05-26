@@ -20,6 +20,10 @@ export function PdfStage({ canvasRef, viewerState, hasDocument }: PdfStageProps)
         </div>
       </div>
 
+      <div className="page-index-banner">
+        Current page index: <strong>{viewerState.page}</strong>
+      </div>
+
       <div className="viewer-surface">
         {hasDocument ? null : <div className="empty-state">Upload a PDF to start the MVP flow.</div>}
         <canvas ref={canvasRef} className={hasDocument ? 'pdf-canvas visible' : 'pdf-canvas'} />

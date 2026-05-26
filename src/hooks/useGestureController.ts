@@ -238,8 +238,9 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
     const leftTarget = baseline - 0.14
     const rightTarget = baseline + 0.14
 
+    const boxDebounceMs = Math.max(config.cooldownMs, 3000)
     let gesture: GestureEvent | null = null
-    if (now - lastTriggeredAtRef.current >= config.cooldownMs) {
+    if (now - lastTriggeredAtRef.current >= boxDebounceMs) {
       if (centerX >= rightTarget) {
         gesture = { label: 'Head right (target)', action: 'next', confidence: Math.min(1, (centerX - baseline) / 0.24), timestamp: now }
       } else if (centerX <= leftTarget) {
