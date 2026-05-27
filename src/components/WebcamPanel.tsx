@@ -10,6 +10,7 @@ interface WebcamPanelProps {
   lastGesture: GestureEvent | null
   debugLines: string[]
   pointerGuide: { centerX: number; baseline: number; leftTarget: number; rightTarget: number; manual: boolean } | null
+  cooldownRemainingMs: number
   onSetManualBaseline: (value: number) => void
   onResetManualBaseline: () => void
 }
@@ -31,7 +32,7 @@ function describeStage(stage: WebcamPanelProps['initStage']) {
   }
 }
 
-export function WebcamPanel({ videoRef, running, error, initStage, lastGesture, debugLines, pointerGuide, onSetManualBaseline, onResetManualBaseline }: WebcamPanelProps) {
+export function WebcamPanel({ videoRef, running, error, initStage, lastGesture, debugLines, pointerGuide, cooldownRemainingMs, onSetManualBaseline, onResetManualBaseline }: WebcamPanelProps) {
   return (
     <section className="panel">
       <div className="panel__header panel__header--split">
@@ -43,7 +44,7 @@ export function WebcamPanel({ videoRef, running, error, initStage, lastGesture, 
       </div>
 
       <div
-        className="webcam-frame webcam-frame--debug"
+        className="webcam-frame webcam-frame--debug webcam-frame--pip"
         onClick={(event) => {
           const rect = event.currentTarget.getBoundingClientRect()
           const x = (event.clientX - rect.left) / rect.width
@@ -57,6 +58,14 @@ export function WebcamPanel({ videoRef, running, error, initStage, lastGesture, 
             <div className="pointer-guide__line pointer-guide__line--baseline" style={{ left: `${pointerGuide.baseline * 100}%` }} />
             <div className="pointer-guide__line pointer-guide__line--right" style={{ left: `${pointerGuide.rightTarget * 100}%` }} />
             <div className="pointer-guide__pointer" style={{ left: `${pointerGuide.centerX * 100}%` }} />
+          </div>
+        ) : null}
+        {cooldownRemainingMs > 0 ? (
+          <div className="cooldown-overlay">
+            <div className="cooldown-overlay__count">{Math.ceil(cooldownRemainingMs / 1000)}</div>
+            <div className="cooldown-bar">
+              <div className="cooldown-bar__fill" style={{ width: `${100 - (cooldownRemainingMs / 3000) * 100}%` }} />
+            </div>
           </div>
         ) : null}
         <div className="webcam-debug-overlay">

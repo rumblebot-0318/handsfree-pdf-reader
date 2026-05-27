@@ -58,6 +58,7 @@ export default function App() {
             lastGesture={gesture.lastGesture}
             debugLines={gesture.debugLines}
             pointerGuide={gesture.pointerGuide}
+            cooldownRemainingMs={gesture.cooldownRemainingMs}
             onSetManualBaseline={gesture.setManualBaseline}
             onResetManualBaseline={gesture.resetManualBaseline}
           />

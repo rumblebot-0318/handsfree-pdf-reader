@@ -89,6 +89,7 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
   const [debugLines, setDebugLines] = useState<string[]>([])
   const [cameraFacingMode, setCameraFacingMode] = useState<'user' | 'environment'>('user')
   const [pointerGuide, setPointerGuide] = useState<{ centerX: number; baseline: number; leftTarget: number; rightTarget: number; manual: boolean } | null>(null)
+  const [cooldownRemainingMs, setCooldownRemainingMs] = useState(0)
   const [initStage, setInitStage] = useState<InitStage>('idle')
 
   const stop = useCallback(() => {
@@ -261,11 +262,20 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
 
     if (gesture) {
       lastTriggeredAtRef.current = gesture.timestamp
+      setCooldownRemainingMs(3000)
       pointerBaselineRef.current = centerX
       setLastGesture(gesture)
       onGesture(gesture)
     }
   }, [config.cooldownMs, onGesture])
+
+  useEffect(() => {
+    if (cooldownRemainingMs <= 0) return
+    const timeout = window.setTimeout(() => {
+      setCooldownRemainingMs(Math.max(0, lastTriggeredAtRef.current + 3000 - Date.now()))
+    }, 100)
+    return () => window.clearTimeout(timeout)
+  }, [cooldownRemainingMs])
 
   const detectLoop = useCallback(() => {
     const video = videoRef.current
@@ -414,8 +424,8 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
   }, [])
 
   const controls = useMemo(
-    () => ({ config, setConfig, isRunning, isLoading, error, lastGesture, debugLines, pointerGuide, start, stop, initStage, cameraFacingMode, switchCamera, setManualBaseline, resetManualBaseline }),
-    [config, isRunning, isLoading, error, lastGesture, debugLines, pointerGuide, start, stop, initStage, cameraFacingMode, switchCamera, setManualBaseline, resetManualBaseline],
+    () => ({ config, setConfig, isRunning, isLoading, error, lastGesture, debugLines, pointerGuide, cooldownRemainingMs, start, stop, initStage, cameraFacingMode, switchCamera, setManualBaseline, resetManualBaseline }),
+    [config, isRunning, isLoading, error, lastGesture, debugLines, pointerGuide, cooldownRemainingMs, start, stop, initStage, cameraFacingMode, switchCamera, setManualBaseline, resetManualBaseline],
   )
 
   return { videoRef, ...controls }

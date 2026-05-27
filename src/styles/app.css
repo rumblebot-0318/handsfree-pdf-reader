@@ -112,6 +112,15 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   border: 1px solid rgba(167, 190, 255, 0.18);
   background: #02060d;
 }
+.webcam-frame--pip {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  width: min(36vw, 320px);
+  aspect-ratio: 16 / 9;
+  z-index: 30;
+  box-shadow: 0 20px 44px rgba(0, 0, 0, 0.35);
+}
 .webcam-frame--debug { position: relative; cursor: crosshair; }
 .webcam-frame video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
 .pointer-guide {
@@ -143,6 +152,34 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   transform: translate(-50%, -50%);
   background: rgba(94, 255, 166, 0.95);
   box-shadow: 0 0 0 3px rgba(5, 15, 28, 0.55);
+}
+.cooldown-overlay {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(4, 10, 18, 0.78);
+  color: #f1f6ff;
+  z-index: 2;
+}
+.cooldown-overlay__count {
+  font-size: 18px;
+  font-weight: 800;
+}
+.cooldown-bar {
+  width: 100%;
+  height: 10px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(120, 145, 190, 0.28);
+}
+.cooldown-bar__fill {
+  height: 100%;
+  background: linear-gradient(90deg, #7aa2ff, #69ffba);
 }
 .webcam-debug-overlay {
   position: absolute;
@@ -182,4 +219,9 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 @media (max-width: 1080px) {
   .layout-grid { grid-template-columns: 1fr; }
   .hero { flex-direction: column; }
+  .webcam-frame--pip {
+    width: min(42vw, 260px);
+    right: 12px;
+    bottom: 12px;
+  }
 }
