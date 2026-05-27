@@ -58,6 +58,8 @@ export default function App() {
             lastGesture={gesture.lastGesture}
             debugLines={gesture.debugLines}
             pointerGuide={gesture.pointerGuide}
+            onSetManualBaseline={gesture.setManualBaseline}
+            onResetManualBaseline={gesture.resetManualBaseline}
           />
         </div>
 

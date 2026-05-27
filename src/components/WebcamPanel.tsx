@@ -9,7 +9,9 @@ interface WebcamPanelProps {
   initStage: 'idle' | 'camera-starting' | 'camera-live' | 'vision-loading' | 'vision-live' | 'vision-failed'
   lastGesture: GestureEvent | null
   debugLines: string[]
-  pointerGuide: { centerX: number; baseline: number; leftTarget: number; rightTarget: number } | null
+  pointerGuide: { centerX: number; baseline: number; leftTarget: number; rightTarget: number; manual: boolean } | null
+  onSetManualBaseline: (value: number) => void
+  onResetManualBaseline: () => void
 }
 
 function describeStage(stage: WebcamPanelProps['initStage']) {
@@ -29,7 +31,7 @@ function describeStage(stage: WebcamPanelProps['initStage']) {
   }
 }
 
-export function WebcamPanel({ videoRef, running, error, initStage, lastGesture, debugLines, pointerGuide }: WebcamPanelProps) {
+export function WebcamPanel({ videoRef, running, error, initStage, lastGesture, debugLines, pointerGuide, onSetManualBaseline, onResetManualBaseline }: WebcamPanelProps) {
   return (
     <section className="panel">
       <div className="panel__header panel__header--split">
@@ -40,7 +42,14 @@ export function WebcamPanel({ videoRef, running, error, initStage, lastGesture, 
         <StatusPill tone={running ? 'good' : 'warn'}>{describeStage(initStage)}</StatusPill>
       </div>
 
-      <div className="webcam-frame webcam-frame--debug">
+      <div
+        className="webcam-frame webcam-frame--debug"
+        onClick={(event) => {
+          const rect = event.currentTarget.getBoundingClientRect()
+          const x = (event.clientX - rect.left) / rect.width
+          onSetManualBaseline(x)
+        }}
+      >
         <video ref={videoRef} autoPlay muted playsInline />
         {pointerGuide ? (
           <div className="pointer-guide">
@@ -54,6 +63,7 @@ export function WebcamPanel({ videoRef, running, error, initStage, lastGesture, 
           <strong>Gesture debug</strong>
           <div>stage: {describeStage(initStage)}</div>
           <div>last: {lastGesture ? `${lastGesture.label} / ${lastGesture.action}` : 'none'}</div>
+          <div>baseline: {pointerGuide?.manual ? 'manual' : 'auto'}</div>
         </div>
       </div>
 
@@ -61,6 +71,9 @@ export function WebcamPanel({ videoRef, running, error, initStage, lastGesture, 
         {error ? <StatusPill tone="warn">{error}</StatusPill> : null}
         {initStage === 'vision-failed' ? <StatusPill tone="warn">Try reopening the camera, reducing open apps, or retrying on a stronger network.</StatusPill> : null}
         {lastGesture ? <StatusPill tone="good">{lastGesture.label} · {lastGesture.action} · {(lastGesture.confidence * 100).toFixed(0)}%</StatusPill> : null}
+        <div className="button-row button-row--compact">
+          <button className="button button--secondary" onClick={onResetManualBaseline}>Reset baseline</button>
+        </div>
         <div className="debug-console">
           <div className="debug-console__title">console</div>
           {debugLines.length === 0 ? <div className="debug-console__line">No landmark events yet.</div> : null}

@@ -79,6 +79,7 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
   const lastKeypointCountRef = useRef(0)
   const faceCenterHistoryRef = useRef<Array<{ x: number; at: number }>>([])
   const pointerBaselineRef = useRef<number | null>(null)
+  const manualBaselineRef = useRef<number | null>(null)
 
   const [config, setConfig] = useState<GestureConfig>(DEFAULT_GESTURE_CONFIG)
   const [isRunning, setIsRunning] = useState(false)
@@ -87,7 +88,7 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
   const [lastGesture, setLastGesture] = useState<GestureEvent | null>(null)
   const [debugLines, setDebugLines] = useState<string[]>([])
   const [cameraFacingMode, setCameraFacingMode] = useState<'user' | 'environment'>('user')
-  const [pointerGuide, setPointerGuide] = useState<{ centerX: number; baseline: number; leftTarget: number; rightTarget: number } | null>(null)
+  const [pointerGuide, setPointerGuide] = useState<{ centerX: number; baseline: number; leftTarget: number; rightTarget: number; manual: boolean } | null>(null)
   const [initStage, setInitStage] = useState<InitStage>('idle')
 
   const stop = useCallback(() => {
@@ -227,13 +228,15 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
       { x: centerX, at: now },
     ]
 
-    if (pointerBaselineRef.current === null) {
-      pointerBaselineRef.current = centerX
-    } else {
-      pointerBaselineRef.current = pointerBaselineRef.current * 0.92 + centerX * 0.08
+    if (manualBaselineRef.current === null) {
+      if (pointerBaselineRef.current === null) {
+        pointerBaselineRef.current = centerX
+      } else {
+        pointerBaselineRef.current = pointerBaselineRef.current * 0.92 + centerX * 0.08
+      }
     }
 
-    const baseline = pointerBaselineRef.current
+    const baseline = manualBaselineRef.current ?? pointerBaselineRef.current ?? centerX
     const deltaX = centerX - baseline
     const leftTarget = baseline - 0.14
     const rightTarget = baseline + 0.14
@@ -248,7 +251,7 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
       }
     }
 
-    setPointerGuide({ centerX, baseline, leftTarget, rightTarget })
+    setPointerGuide({ centerX, baseline, leftTarget, rightTarget, manual: manualBaselineRef.current !== null })
 
     const line = gesture
       ? `boxGesture=${gesture.label} action=${gesture.action} conf=${gesture.confidence.toFixed(2)} center=(${centerX.toFixed(2)},${centerY.toFixed(2)}) baseline=${baseline.toFixed(2)} leftTarget=${leftTarget.toFixed(2)} rightTarget=${rightTarget.toFixed(2)} dx=${deltaX.toFixed(2)} box=(${xMin.toFixed(0)},${yMin.toFixed(0)},${boxWidth.toFixed(0)},${boxHeight.toFixed(0)}) faces=${lastFaceCountRef.current}`
@@ -389,9 +392,30 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
     }
   }, [cameraFacingMode, isRunning, start, stop])
 
+  const setManualBaseline = useCallback((value: number) => {
+    const clamped = Math.min(0.9, Math.max(0.1, value))
+    manualBaselineRef.current = clamped
+    setPointerGuide((prev) => {
+      const centerX = prev?.centerX ?? clamped
+      return {
+        centerX,
+        baseline: clamped,
+        leftTarget: clamped - 0.14,
+        rightTarget: clamped + 0.14,
+        manual: true,
+      }
+    })
+    setDebugLines((prev) => [`manual baseline=${clamped.toFixed(2)}`, ...prev.slice(0, 7)])
+  }, [])
+
+  const resetManualBaseline = useCallback(() => {
+    manualBaselineRef.current = null
+    setDebugLines((prev) => [`manual baseline reset`, ...prev.slice(0, 7)])
+  }, [])
+
   const controls = useMemo(
-    () => ({ config, setConfig, isRunning, isLoading, error, lastGesture, debugLines, pointerGuide, start, stop, initStage, cameraFacingMode, switchCamera }),
-    [config, isRunning, isLoading, error, lastGesture, debugLines, pointerGuide, start, stop, initStage, cameraFacingMode, switchCamera],
+    () => ({ config, setConfig, isRunning, isLoading, error, lastGesture, debugLines, pointerGuide, start, stop, initStage, cameraFacingMode, switchCamera, setManualBaseline, resetManualBaseline }),
+    [config, isRunning, isLoading, error, lastGesture, debugLines, pointerGuide, start, stop, initStage, cameraFacingMode, switchCamera, setManualBaseline, resetManualBaseline],
   )
 
   return { videoRef, ...controls }
