@@ -1,4 +1,4 @@
-import type { RefObject } from 'react'
+import { useState, type RefObject } from 'react'
 import type { GestureEvent } from '../types'
 import { StatusPill } from './StatusPill'
 
@@ -33,8 +33,10 @@ function describeStage(stage: WebcamPanelProps['initStage']) {
 }
 
 export function WebcamPanel({ videoRef, running, error, initStage, lastGesture, debugLines, pointerGuide, cooldownRemainingMs, onSetManualBaseline, onResetManualBaseline }: WebcamPanelProps) {
+  const [debugOpen, setDebugOpen] = useState(false)
+
   return (
-    <section className="panel">
+    <section className="panel panel--compact">
       <div className="panel__header panel__header--split">
         <div>
           <h2>Gesture camera</h2>
@@ -69,7 +71,7 @@ export function WebcamPanel({ videoRef, running, error, initStage, lastGesture, 
           </div>
         ) : null}
         <div className="webcam-debug-overlay">
-          <strong>Gesture debug</strong>
+          <strong>Gesture guide</strong>
           <div>stage: {describeStage(initStage)}</div>
           <div>last: {lastGesture ? `${lastGesture.label} / ${lastGesture.action}` : 'none'}</div>
           <div>baseline: {pointerGuide?.manual ? 'manual' : 'auto'}</div>
@@ -80,16 +82,21 @@ export function WebcamPanel({ videoRef, running, error, initStage, lastGesture, 
         {error ? <StatusPill tone="warn">{error}</StatusPill> : null}
         {initStage === 'vision-failed' ? <StatusPill tone="warn">Try reopening the camera, reducing open apps, or retrying on a stronger network.</StatusPill> : null}
         {lastGesture ? <StatusPill tone="good">{lastGesture.label} · {lastGesture.action} · {(lastGesture.confidence * 100).toFixed(0)}%</StatusPill> : null}
-        <div className="button-row button-row--compact">
+        <div className="button-row button-row--compact button-row--wrap">
           <button className="button button--secondary" onClick={onResetManualBaseline}>Reset baseline</button>
+          <button className="button button--ghost" onClick={() => setDebugOpen((value) => !value)}>
+            {debugOpen ? 'Hide debug' : 'Show debug'}
+          </button>
         </div>
-        <div className="debug-console">
-          <div className="debug-console__title">console</div>
-          {debugLines.length === 0 ? <div className="debug-console__line">No landmark events yet.</div> : null}
-          {debugLines.map((line, index) => (
-            <div key={`${line}-${index}`} className="debug-console__line">{line}</div>
-          ))}
-        </div>
+        {debugOpen ? (
+          <div className="debug-console">
+            <div className="debug-console__title">console</div>
+            {debugLines.length === 0 ? <div className="debug-console__line">No landmark events yet.</div> : null}
+            {debugLines.map((line, index) => (
+              <div key={`${line}-${index}`} className="debug-console__line">{line}</div>
+            ))}
+          </div>
+        ) : null}
       </div>
     </section>
   )

@@ -10,7 +10,7 @@ interface PdfStageProps {
 export function PdfStage({ canvasRef, viewerState, hasDocument }: PdfStageProps) {
   return (
     <section className="panel panel--viewer">
-      <div className="panel__header panel__header--split">
+      <div className="panel__header panel__header--split panel__header--reader">
         <div>
           <h2>Reader</h2>
           <p>Hands-free PDF navigation with privacy-first browser processing.</p>
@@ -25,7 +25,12 @@ export function PdfStage({ canvasRef, viewerState, hasDocument }: PdfStageProps)
       </div>
 
       <div className="viewer-surface">
-        {hasDocument ? null : <div className="empty-state">Upload a PDF to start the MVP flow.</div>}
+        {hasDocument ? null : (
+          <div className="empty-state empty-state--reader">
+            <strong>Upload a PDF to begin.</strong>
+            <span>Then start the webcam and use left/right head movement to turn pages.</span>
+          </div>
+        )}
         <canvas ref={canvasRef} className={hasDocument ? 'pdf-canvas visible' : 'pdf-canvas'} />
       </div>
     </section>
