@@ -223,7 +223,6 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
 
     const now = Date.now()
     const centerX = (xMin + boxWidth / 2) / width
-    const centerY = (yMin + boxHeight / 2) / height
     faceCenterHistoryRef.current = [
       ...faceCenterHistoryRef.current.filter((entry) => now - entry.at <= 3000),
       { x: centerX, at: now },
@@ -255,8 +254,8 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
     setPointerGuide({ centerX, baseline, leftTarget, rightTarget, manual: manualBaselineRef.current !== null })
 
     const line = gesture
-      ? `boxGesture=${gesture.label} action=${gesture.action} conf=${gesture.confidence.toFixed(2)} center=(${centerX.toFixed(2)},${centerY.toFixed(2)}) baseline=${baseline.toFixed(2)} leftTarget=${leftTarget.toFixed(2)} rightTarget=${rightTarget.toFixed(2)} dx=${deltaX.toFixed(2)} box=(${xMin.toFixed(0)},${yMin.toFixed(0)},${boxWidth.toFixed(0)},${boxHeight.toFixed(0)}) faces=${lastFaceCountRef.current}`
-      : `boxGesture=none center=(${centerX.toFixed(2)},${centerY.toFixed(2)}) baseline=${baseline.toFixed(2)} leftTarget=${leftTarget.toFixed(2)} rightTarget=${rightTarget.toFixed(2)} dx=${deltaX.toFixed(2)} box=(${xMin.toFixed(0)},${yMin.toFixed(0)},${boxWidth.toFixed(0)},${boxHeight.toFixed(0)}) faces=${lastFaceCountRef.current}`
+      ? `boxGesture=${gesture.label} action=${gesture.action} conf=${gesture.confidence.toFixed(2)} centerX=${centerX.toFixed(2)} baseline=${baseline.toFixed(2)} leftTarget=${leftTarget.toFixed(2)} rightTarget=${rightTarget.toFixed(2)} dx=${deltaX.toFixed(2)} box=(${xMin.toFixed(0)},${yMin.toFixed(0)},${boxWidth.toFixed(0)},${boxHeight.toFixed(0)}) faces=${lastFaceCountRef.current}`
+      : `boxGesture=none centerX=${centerX.toFixed(2)} baseline=${baseline.toFixed(2)} leftTarget=${leftTarget.toFixed(2)} rightTarget=${rightTarget.toFixed(2)} dx=${deltaX.toFixed(2)} box=(${xMin.toFixed(0)},${yMin.toFixed(0)},${boxWidth.toFixed(0)},${boxHeight.toFixed(0)}) faces=${lastFaceCountRef.current}`
 
     setDebugLines((prev) => [line, ...prev.slice(0, 7)])
 

@@ -58,7 +58,7 @@ export function ControlsPanel(props: ControlsPanelProps) {
         </label>
 
         <label>
-          <span>Head turn threshold</span>
+          <span>Horizontal head turn threshold</span>
           <input
             type="range"
             min="0.15"
