@@ -80,6 +80,7 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
   const faceCenterHistoryRef = useRef<Array<{ x: number; at: number }>>([])
   const pointerBaselineRef = useRef<number | null>(null)
   const manualBaselineRef = useRef<number | null>(null)
+  const manualThresholdOffsetRef = useRef<number | null>(null)
 
   const [config, setConfig] = useState<GestureConfig>(DEFAULT_GESTURE_CONFIG)
   const [isRunning, setIsRunning] = useState(false)
@@ -88,7 +89,7 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
   const [lastGesture, setLastGesture] = useState<GestureEvent | null>(null)
   const [debugLines, setDebugLines] = useState<string[]>([])
   const [cameraFacingMode, setCameraFacingMode] = useState<'user' | 'environment'>('user')
-  const [pointerGuide, setPointerGuide] = useState<{ centerX: number; baseline: number; leftTarget: number; rightTarget: number; manual: boolean } | null>(null)
+  const [pointerGuide, setPointerGuide] = useState<{ centerX: number; baseline: number; leftTarget: number; rightTarget: number; manual: boolean; offset: number } | null>(null)
   const [cooldownRemainingMs, setCooldownRemainingMs] = useState(0)
   const [initStage, setInitStage] = useState<InitStage>('idle')
 
@@ -237,9 +238,10 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
     }
 
     const baseline = manualBaselineRef.current ?? pointerBaselineRef.current ?? centerX
+    const offset = manualThresholdOffsetRef.current ?? 0.14
     const deltaX = centerX - baseline
-    const leftTarget = baseline - 0.14
-    const rightTarget = baseline + 0.14
+    const leftTarget = Math.max(0.04, baseline - offset)
+    const rightTarget = Math.min(0.96, baseline + offset)
 
     const boxDebounceMs = Math.max(config.cooldownMs, 3000)
     let gesture: GestureEvent | null = null
@@ -251,7 +253,7 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
       }
     }
 
-    setPointerGuide({ centerX, baseline, leftTarget, rightTarget, manual: manualBaselineRef.current !== null })
+    setPointerGuide({ centerX, baseline, leftTarget, rightTarget, manual: manualBaselineRef.current !== null, offset })
 
     const line = gesture
       ? `boxGesture=${gesture.label} action=${gesture.action} conf=${gesture.confidence.toFixed(2)} centerX=${centerX.toFixed(2)} baseline=${baseline.toFixed(2)} leftTarget=${leftTarget.toFixed(2)} rightTarget=${rightTarget.toFixed(2)} dx=${deltaX.toFixed(2)} box=(${xMin.toFixed(0)},${yMin.toFixed(0)},${boxWidth.toFixed(0)},${boxHeight.toFixed(0)}) faces=${lastFaceCountRef.current}`
@@ -403,28 +405,46 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
 
   const setManualBaseline = useCallback((value: number) => {
     const clamped = Math.min(0.9, Math.max(0.1, value))
+    const offset = manualThresholdOffsetRef.current ?? 0.14
     manualBaselineRef.current = clamped
     setPointerGuide((prev) => {
       const centerX = prev?.centerX ?? clamped
       return {
         centerX,
         baseline: clamped,
-        leftTarget: clamped - 0.14,
-        rightTarget: clamped + 0.14,
+        leftTarget: Math.max(0.04, clamped - offset),
+        rightTarget: Math.min(0.96, clamped + offset),
         manual: true,
+        offset,
       }
     })
     setDebugLines((prev) => [`manual baseline=${clamped.toFixed(2)}`, ...prev.slice(0, 7)])
   }, [])
 
+  const setManualThresholdOffset = useCallback((value: number) => {
+    const clamped = Math.min(0.32, Math.max(0.05, value))
+    manualThresholdOffsetRef.current = clamped
+    setPointerGuide((prev) => {
+      if (!prev) return prev
+      return {
+        ...prev,
+        leftTarget: Math.max(0.04, prev.baseline - clamped),
+        rightTarget: Math.min(0.96, prev.baseline + clamped),
+        offset: clamped,
+      }
+    })
+    setDebugLines((prev) => [`manual threshold offset=${clamped.toFixed(2)}`, ...prev.slice(0, 7)])
+  }, [])
+
   const resetManualBaseline = useCallback(() => {
     manualBaselineRef.current = null
+    manualThresholdOffsetRef.current = null
     setDebugLines((prev) => [`manual baseline reset`, ...prev.slice(0, 7)])
   }, [])
 
   const controls = useMemo(
-    () => ({ config, setConfig, isRunning, isLoading, error, lastGesture, debugLines, pointerGuide, cooldownRemainingMs, start, stop, initStage, cameraFacingMode, switchCamera, setManualBaseline, resetManualBaseline }),
-    [config, isRunning, isLoading, error, lastGesture, debugLines, pointerGuide, cooldownRemainingMs, start, stop, initStage, cameraFacingMode, switchCamera, setManualBaseline, resetManualBaseline],
+    () => ({ config, setConfig, isRunning, isLoading, error, lastGesture, debugLines, pointerGuide, cooldownRemainingMs, start, stop, initStage, cameraFacingMode, switchCamera, setManualBaseline, setManualThresholdOffset, resetManualBaseline }),
+    [config, isRunning, isLoading, error, lastGesture, debugLines, pointerGuide, cooldownRemainingMs, start, stop, initStage, cameraFacingMode, switchCamera, setManualBaseline, setManualThresholdOffset, resetManualBaseline],
   )
 
   return { videoRef, ...controls }

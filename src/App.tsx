@@ -69,6 +69,7 @@ export default function App() {
             pointerGuide={gesture.pointerGuide}
             cooldownRemainingMs={gesture.cooldownRemainingMs}
             onSetManualBaseline={gesture.setManualBaseline}
+            onSetManualThresholdOffset={gesture.setManualThresholdOffset}
             onResetManualBaseline={gesture.resetManualBaseline}
           />
         </div>

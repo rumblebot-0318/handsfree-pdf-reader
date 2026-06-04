@@ -200,6 +200,32 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   background: rgba(94, 255, 166, 0.95);
   box-shadow: 0 0 0 3px rgba(5, 15, 28, 0.55);
 }
+.pointer-guide__handle {
+  position: absolute;
+  top: calc(100% - 28px);
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  transform: translateX(-50%);
+  display: grid;
+  place-items: center;
+  padding: 0;
+  font-size: 11px;
+  font-weight: 800;
+  border: 1px solid rgba(226, 232, 240, 0.25);
+  z-index: 3;
+  touch-action: none;
+  user-select: none;
+}
+.pointer-guide__handle--baseline {
+  background: #63b6ff;
+  color: #08111e;
+}
+.pointer-guide__handle--left,
+.pointer-guide__handle--right {
+  background: #ffb74d;
+  color: #08111e;
+}
 .cooldown-overlay {
   position: absolute;
   left: 12px;
@@ -240,6 +266,19 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   color: #d7e6ff;
   font-size: 12px;
   backdrop-filter: blur(6px);
+}
+.guide-readout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.guide-readout span {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(17, 31, 56, 0.92);
+  border: 1px solid rgba(179, 202, 255, 0.16);
+  color: #dbe5ff;
+  font-size: 12px;
 }
 .debug-console {
   display: grid;

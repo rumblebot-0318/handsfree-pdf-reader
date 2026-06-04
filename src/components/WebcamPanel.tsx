@@ -1,4 +1,4 @@
-import { useState, type RefObject } from 'react'
+import { useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react'
 import type { GestureEvent } from '../types'
 import { StatusPill } from './StatusPill'
 
@@ -9,9 +9,10 @@ interface WebcamPanelProps {
   initStage: 'idle' | 'camera-starting' | 'camera-live' | 'vision-loading' | 'vision-live' | 'vision-failed'
   lastGesture: GestureEvent | null
   debugLines: string[]
-  pointerGuide: { centerX: number; baseline: number; leftTarget: number; rightTarget: number; manual: boolean } | null
+  pointerGuide: { centerX: number; baseline: number; leftTarget: number; rightTarget: number; manual: boolean; offset: number } | null
   cooldownRemainingMs: number
   onSetManualBaseline: (value: number) => void
+  onSetManualThresholdOffset: (value: number) => void
   onResetManualBaseline: () => void
 }
 
@@ -32,25 +33,55 @@ function describeStage(stage: WebcamPanelProps['initStage']) {
   }
 }
 
-export function WebcamPanel({ videoRef, running, error, initStage, lastGesture, debugLines, pointerGuide, cooldownRemainingMs, onSetManualBaseline, onResetManualBaseline }: WebcamPanelProps) {
+type DragMode = 'baseline' | 'left' | 'right' | null
+
+export function WebcamPanel({ videoRef, running, error, initStage, lastGesture, debugLines, pointerGuide, cooldownRemainingMs, onSetManualBaseline, onSetManualThresholdOffset, onResetManualBaseline }: WebcamPanelProps) {
   const [debugOpen, setDebugOpen] = useState(false)
+  const dragModeRef = useRef<DragMode>(null)
+
+  const updateFromPointer = (clientX: number, rect: DOMRect) => {
+    if (!pointerGuide || !dragModeRef.current) return
+    const ratio = Math.min(0.96, Math.max(0.04, (clientX - rect.left) / rect.width))
+
+    if (dragModeRef.current === 'baseline') {
+      onSetManualBaseline(ratio)
+      return
+    }
+
+    const nextOffset = Math.abs(ratio - pointerGuide.baseline)
+    onSetManualThresholdOffset(nextOffset)
+  }
+
+  const beginDrag = (mode: Exclude<DragMode, null>) => (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const frame = event.currentTarget.closest('.webcam-frame') as HTMLDivElement | null
+    if (!frame) return
+    dragModeRef.current = mode
+    event.currentTarget.setPointerCapture(event.pointerId)
+    updateFromPointer(event.clientX, frame.getBoundingClientRect())
+  }
+
+  const endDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    dragModeRef.current = null
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+  }
 
   return (
     <section className="panel panel--compact">
       <div className="panel__header panel__header--split">
         <div>
           <h2>Gesture camera</h2>
-          <p>Local webcam processing only. No video leaves the browser.</p>
+          <p>Drag the center or side handles to tune page-turn target lines.</p>
         </div>
         <StatusPill tone={running ? 'good' : 'warn'}>{describeStage(initStage)}</StatusPill>
       </div>
 
       <div
         className="webcam-frame webcam-frame--debug webcam-frame--pip"
-        onClick={(event) => {
-          const rect = event.currentTarget.getBoundingClientRect()
-          const x = (event.clientX - rect.left) / rect.width
-          onSetManualBaseline(x)
+        onPointerMove={(event) => {
+          if (!dragModeRef.current) return
+          updateFromPointer(event.clientX, event.currentTarget.getBoundingClientRect())
         }}
       >
         <video ref={videoRef} autoPlay muted playsInline />
@@ -60,6 +91,33 @@ export function WebcamPanel({ videoRef, running, error, initStage, lastGesture, 
             <div className="pointer-guide__line pointer-guide__line--baseline" style={{ left: `${pointerGuide.baseline * 100}%` }} />
             <div className="pointer-guide__line pointer-guide__line--right" style={{ left: `${pointerGuide.rightTarget * 100}%` }} />
             <div className="pointer-guide__pointer" style={{ left: `${pointerGuide.centerX * 100}%` }} />
+            <button
+              type="button"
+              className="pointer-guide__handle pointer-guide__handle--left"
+              style={{ left: `${pointerGuide.leftTarget * 100}%` }}
+              onPointerDown={beginDrag('left')}
+              onPointerUp={endDrag}
+            >
+              L
+            </button>
+            <button
+              type="button"
+              className="pointer-guide__handle pointer-guide__handle--baseline"
+              style={{ left: `${pointerGuide.baseline * 100}%` }}
+              onPointerDown={beginDrag('baseline')}
+              onPointerUp={endDrag}
+            >
+              C
+            </button>
+            <button
+              type="button"
+              className="pointer-guide__handle pointer-guide__handle--right"
+              style={{ left: `${pointerGuide.rightTarget * 100}%` }}
+              onPointerDown={beginDrag('right')}
+              onPointerUp={endDrag}
+            >
+              R
+            </button>
           </div>
         ) : null}
         {cooldownRemainingMs > 0 ? (
@@ -75,6 +133,7 @@ export function WebcamPanel({ videoRef, running, error, initStage, lastGesture, 
           <div>stage: {describeStage(initStage)}</div>
           <div>last: {lastGesture ? `${lastGesture.label} / ${lastGesture.action}` : 'none'}</div>
           <div>baseline: {pointerGuide?.manual ? 'manual' : 'auto'}</div>
+          {pointerGuide ? <div>range: ±{(pointerGuide.offset * 100).toFixed(0)}%</div> : null}
         </div>
       </div>
 
@@ -82,8 +141,15 @@ export function WebcamPanel({ videoRef, running, error, initStage, lastGesture, 
         {error ? <StatusPill tone="warn">{error}</StatusPill> : null}
         {initStage === 'vision-failed' ? <StatusPill tone="warn">Try reopening the camera, reducing open apps, or retrying on a stronger network.</StatusPill> : null}
         {lastGesture ? <StatusPill tone="good">{lastGesture.label} · {lastGesture.action} · {(lastGesture.confidence * 100).toFixed(0)}%</StatusPill> : null}
+        {pointerGuide ? (
+          <div className="guide-readout">
+            <span>Center {Math.round(pointerGuide.baseline * 100)}%</span>
+            <span>Left {Math.round(pointerGuide.leftTarget * 100)}%</span>
+            <span>Right {Math.round(pointerGuide.rightTarget * 100)}%</span>
+          </div>
+        ) : null}
         <div className="button-row button-row--compact button-row--wrap">
-          <button className="button button--secondary" onClick={onResetManualBaseline}>Reset baseline</button>
+          <button className="button button--secondary" onClick={onResetManualBaseline}>Reset guide</button>
           <button className="button button--ghost" onClick={() => setDebugOpen((value) => !value)}>
             {debugOpen ? 'Hide debug' : 'Show debug'}
           </button>
