@@ -11,6 +11,7 @@ interface WebcamPanelProps {
   debugLines: string[]
   pointerGuide: { centerX: number; baseline: number; leftTarget: number; rightTarget: number; manual: boolean; offset: number } | null
   cooldownRemainingMs: number
+  autoLockCountdownMs: number
   onSetManualBaseline: (value: number) => void
   onSetManualThresholdOffset: (value: number) => void
   onResetManualBaseline: () => void
@@ -35,7 +36,7 @@ function describeStage(stage: WebcamPanelProps['initStage']) {
 
 type DragMode = 'baseline' | 'left' | 'right' | null
 
-export function WebcamPanel({ videoRef, running, error, initStage, lastGesture, debugLines, pointerGuide, cooldownRemainingMs, onSetManualBaseline, onSetManualThresholdOffset, onResetManualBaseline }: WebcamPanelProps) {
+export function WebcamPanel({ videoRef, running, error, initStage, lastGesture, debugLines, pointerGuide, cooldownRemainingMs, autoLockCountdownMs, onSetManualBaseline, onSetManualThresholdOffset, onResetManualBaseline }: WebcamPanelProps) {
   const [debugOpen, setDebugOpen] = useState(false)
   const dragModeRef = useRef<DragMode>(null)
 
@@ -133,6 +134,7 @@ export function WebcamPanel({ videoRef, running, error, initStage, lastGesture, 
           <div>stage: {describeStage(initStage)}</div>
           <div>last: {lastGesture ? `${lastGesture.label} / ${lastGesture.action}` : 'none'}</div>
           <div>baseline: {pointerGuide?.manual ? 'manual' : 'auto'}</div>
+          {autoLockCountdownMs > 0 ? <div>lock in: {(autoLockCountdownMs / 1000).toFixed(1)}s</div> : null}
           {pointerGuide ? <div>range: ±{(pointerGuide.offset * 100).toFixed(0)}%</div> : null}
         </div>
       </div>
@@ -140,6 +142,7 @@ export function WebcamPanel({ videoRef, running, error, initStage, lastGesture, 
       <div className="stack compact">
         {error ? <StatusPill tone="warn">{error}</StatusPill> : null}
         {initStage === 'vision-failed' ? <StatusPill tone="warn">Try reopening the camera, reducing open apps, or retrying on a stronger network.</StatusPill> : null}
+        {autoLockCountdownMs > 0 ? <StatusPill>Locking baseline in {Math.ceil(autoLockCountdownMs / 1000)}… Hold still.</StatusPill> : null}
         {lastGesture ? <StatusPill tone="good">{lastGesture.label} · {lastGesture.action} · {(lastGesture.confidence * 100).toFixed(0)}%</StatusPill> : null}
         {pointerGuide ? (
           <div className="guide-readout">

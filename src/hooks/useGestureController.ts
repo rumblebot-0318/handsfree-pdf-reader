@@ -79,6 +79,7 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
   const lastKeypointCountRef = useRef(0)
   const faceCenterHistoryRef = useRef<Array<{ x: number; at: number }>>([])
   const autoBaselineLockedRef = useRef(false)
+  const autoBaselineStartedAtRef = useRef<number | null>(null)
   const pointerBaselineRef = useRef<number | null>(null)
   const manualBaselineRef = useRef<number | null>(null)
   const manualThresholdOffsetRef = useRef<number | null>(null)
@@ -92,6 +93,7 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
   const [cameraFacingMode, setCameraFacingMode] = useState<'user' | 'environment'>('user')
   const [pointerGuide, setPointerGuide] = useState<{ centerX: number; baseline: number; leftTarget: number; rightTarget: number; manual: boolean; offset: number } | null>(null)
   const [cooldownRemainingMs, setCooldownRemainingMs] = useState(0)
+  const [autoLockCountdownMs, setAutoLockCountdownMs] = useState(0)
   const [initStage, setInitStage] = useState<InitStage>('idle')
 
   const stop = useCallback(() => {
@@ -231,11 +233,22 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
     ]
 
     if (manualBaselineRef.current === null && !autoBaselineLockedRef.current) {
-      const sampleCount = faceCenterHistoryRef.current.length
-      if (sampleCount >= 6) {
-        const avgCenterX = faceCenterHistoryRef.current.reduce((sum, entry) => sum + entry.x, 0) / sampleCount
+      if (autoBaselineStartedAtRef.current === null) {
+        autoBaselineStartedAtRef.current = now
+      }
+
+      const elapsed = now - autoBaselineStartedAtRef.current
+      const remaining = Math.max(0, 2000 - elapsed)
+      setAutoLockCountdownMs(remaining)
+
+      if (elapsed >= 2000) {
+        const sampleCount = faceCenterHistoryRef.current.length
+        const avgCenterX = sampleCount > 0
+          ? faceCenterHistoryRef.current.reduce((sum, entry) => sum + entry.x, 0) / sampleCount
+          : centerX
         pointerBaselineRef.current = avgCenterX
         autoBaselineLockedRef.current = true
+        setAutoLockCountdownMs(0)
         setDebugLines((prev) => [`auto baseline locked=${avgCenterX.toFixed(2)} samples=${sampleCount}`, ...prev.slice(0, 7)])
       }
     }
@@ -279,6 +292,17 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
     }, 100)
     return () => window.clearTimeout(timeout)
   }, [cooldownRemainingMs])
+
+  useEffect(() => {
+    if (autoBaselineLockedRef.current || autoBaselineStartedAtRef.current === null || manualBaselineRef.current !== null) return
+    if (autoLockCountdownMs <= 0) return
+    const timeout = window.setTimeout(() => {
+      const startedAt = autoBaselineStartedAtRef.current
+      if (startedAt === null || autoBaselineLockedRef.current || manualBaselineRef.current !== null) return
+      setAutoLockCountdownMs(Math.max(0, 2000 - (Date.now() - startedAt)))
+    }, 100)
+    return () => window.clearTimeout(timeout)
+  }, [autoLockCountdownMs])
 
   const detectLoop = useCallback(() => {
     const video = videoRef.current
@@ -359,6 +383,11 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
       videoRef.current.playsInline = true
       await videoRef.current.play()
       await new Promise((resolve) => window.setTimeout(resolve, isMobileDevice() ? 800 : 200))
+      autoBaselineStartedAtRef.current = null
+      autoBaselineLockedRef.current = false
+      pointerBaselineRef.current = null
+      faceCenterHistoryRef.current = []
+      setAutoLockCountdownMs(2000)
       setIsRunning(true)
       setInitStage('camera-live')
       setDebugLines([
@@ -443,13 +472,15 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
     manualThresholdOffsetRef.current = null
     pointerBaselineRef.current = null
     autoBaselineLockedRef.current = false
+    autoBaselineStartedAtRef.current = null
     faceCenterHistoryRef.current = []
+    setAutoLockCountdownMs(isRunning ? 2000 : 0)
     setDebugLines((prev) => [`manual baseline reset`, ...prev.slice(0, 7)])
   }, [])
 
   const controls = useMemo(
-    () => ({ config, setConfig, isRunning, isLoading, error, lastGesture, debugLines, pointerGuide, cooldownRemainingMs, start, stop, initStage, cameraFacingMode, switchCamera, setManualBaseline, setManualThresholdOffset, resetManualBaseline }),
-    [config, isRunning, isLoading, error, lastGesture, debugLines, pointerGuide, cooldownRemainingMs, start, stop, initStage, cameraFacingMode, switchCamera, setManualBaseline, setManualThresholdOffset, resetManualBaseline],
+    () => ({ config, setConfig, isRunning, isLoading, error, lastGesture, debugLines, pointerGuide, cooldownRemainingMs, autoLockCountdownMs, start, stop, initStage, cameraFacingMode, switchCamera, setManualBaseline, setManualThresholdOffset, resetManualBaseline }),
+    [config, isRunning, isLoading, error, lastGesture, debugLines, pointerGuide, cooldownRemainingMs, autoLockCountdownMs, start, stop, initStage, cameraFacingMode, switchCamera, setManualBaseline, setManualThresholdOffset, resetManualBaseline],
   )
 
   return { videoRef, ...controls }
