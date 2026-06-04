@@ -229,12 +229,8 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
       { x: centerX, at: now },
     ]
 
-    if (manualBaselineRef.current === null) {
-      if (pointerBaselineRef.current === null) {
-        pointerBaselineRef.current = centerX
-      } else {
-        pointerBaselineRef.current = pointerBaselineRef.current * 0.92 + centerX * 0.08
-      }
+    if (manualBaselineRef.current === null && pointerBaselineRef.current === null) {
+      pointerBaselineRef.current = centerX
     }
 
     const baseline = manualBaselineRef.current ?? pointerBaselineRef.current ?? centerX
@@ -264,7 +260,6 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
     if (gesture) {
       lastTriggeredAtRef.current = gesture.timestamp
       setCooldownRemainingMs(3000)
-      pointerBaselineRef.current = centerX
       setLastGesture(gesture)
       onGesture(gesture)
     }
