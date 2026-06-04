@@ -142,7 +142,7 @@ export function WebcamPanel({ videoRef, running, error, initStage, lastGesture, 
       <div className="stack compact">
         {error ? <StatusPill tone="warn">{error}</StatusPill> : null}
         {initStage === 'vision-failed' ? <StatusPill tone="warn">Try reopening the camera, reducing open apps, or retrying on a stronger network.</StatusPill> : null}
-        {autoLockCountdownMs > 0 ? <StatusPill>Locking baseline in {Math.ceil(autoLockCountdownMs / 1000)}… Hold still.</StatusPill> : null}
+        {autoLockCountdownMs > 0 ? <StatusPill>Locking baseline in {Math.ceil(autoLockCountdownMs / 1000)}… Hold still and face forward.</StatusPill> : null}
         {lastGesture ? <StatusPill tone="good">{lastGesture.label} · {lastGesture.action} · {(lastGesture.confidence * 100).toFixed(0)}%</StatusPill> : null}
         {pointerGuide ? (
           <div className="guide-readout">

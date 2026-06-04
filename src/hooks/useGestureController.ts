@@ -138,12 +138,15 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
     const faceCenterX = (leftCheek.x + rightCheek.x) / 2
     const faceWidth = Math.abs(rightCheek.x - leftCheek.x) || 1
     const yaw = (nose.x - faceCenterX) / faceWidth
+    const allowGestures = autoLockCountdownMs <= 0
 
-    const gesture = inferGesture({
-      landmarks,
-      config,
-      lastTriggeredAt: lastTriggeredAtRef.current,
-    })
+    const gesture = allowGestures
+      ? inferGesture({
+          landmarks,
+          config,
+          lastTriggeredAt: lastTriggeredAtRef.current,
+        })
+      : null
 
     const line = gesture
       ? `gesture=${gesture.label} action=${gesture.action} conf=${gesture.confidence.toFixed(2)} leftEye=${leftRatio.toFixed(2)} rightEye=${rightRatio.toFixed(2)} yaw=${yaw.toFixed(2)} faces=${lastFaceCountRef.current} keypoints=${landmarks.length}`
@@ -227,14 +230,17 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
 
     const now = Date.now()
     const centerX = (xMin + boxWidth / 2) / width
-    faceCenterHistoryRef.current = [
-      ...faceCenterHistoryRef.current.filter((entry) => now - entry.at <= 2000),
-      { x: centerX, at: now },
-    ]
-
     if (manualBaselineRef.current === null && !autoBaselineLockedRef.current) {
       if (autoBaselineStartedAtRef.current === null) {
         autoBaselineStartedAtRef.current = now
+      }
+
+      const facingForward = Math.abs(centerX - 0.5) <= 0.18
+      if (facingForward) {
+        faceCenterHistoryRef.current = [
+          ...faceCenterHistoryRef.current.filter((entry) => now - entry.at <= 2000),
+          { x: centerX, at: now },
+        ]
       }
 
       const elapsed = now - autoBaselineStartedAtRef.current
@@ -249,7 +255,7 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
         pointerBaselineRef.current = avgCenterX
         autoBaselineLockedRef.current = true
         setAutoLockCountdownMs(0)
-        setDebugLines((prev) => [`auto baseline locked=${avgCenterX.toFixed(2)} samples=${sampleCount}`, ...prev.slice(0, 7)])
+        setDebugLines((prev) => [`auto baseline locked=${avgCenterX.toFixed(2)} samples=${sampleCount} forwardOnly=true`, ...prev.slice(0, 7)])
       }
     }
 
@@ -261,7 +267,7 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
 
     const boxDebounceMs = Math.max(config.cooldownMs, 3000)
     let gesture: GestureEvent | null = null
-    if (now - lastTriggeredAtRef.current >= boxDebounceMs) {
+    if (autoLockCountdownMs <= 0 && now - lastTriggeredAtRef.current >= boxDebounceMs) {
       if (centerX >= rightTarget) {
         gesture = { label: 'Head right (target)', action: 'next', confidence: Math.min(1, (centerX - baseline) / 0.24), timestamp: now }
       } else if (centerX <= leftTarget) {
