@@ -12,6 +12,7 @@ interface WebcamPanelProps {
   pointerGuide: { centerX: number; baseline: number; leftTarget: number; rightTarget: number; manual: boolean; offset: number } | null
   cooldownRemainingMs: number
   autoLockCountdownMs: number
+  guideToast: string | null
   onSetManualBaseline: (value: number) => void
   onSetManualThresholdOffset: (value: number) => void
   onResetManualBaseline: () => void
@@ -36,7 +37,7 @@ function describeStage(stage: WebcamPanelProps['initStage']) {
 
 type DragMode = 'baseline' | 'left' | 'right' | null
 
-export function WebcamPanel({ videoRef, running, error, initStage, lastGesture, debugLines, pointerGuide, cooldownRemainingMs, autoLockCountdownMs, onSetManualBaseline, onSetManualThresholdOffset, onResetManualBaseline }: WebcamPanelProps) {
+export function WebcamPanel({ videoRef, running, error, initStage, lastGesture, debugLines, pointerGuide, cooldownRemainingMs, autoLockCountdownMs, guideToast, onSetManualBaseline, onSetManualThresholdOffset, onResetManualBaseline }: WebcamPanelProps) {
   const [debugOpen, setDebugOpen] = useState(false)
   const dragModeRef = useRef<DragMode>(null)
 
@@ -129,6 +130,7 @@ export function WebcamPanel({ videoRef, running, error, initStage, lastGesture, 
             </div>
           </div>
         ) : null}
+        {guideToast ? <div className="guide-toast">{guideToast}</div> : null}
         <div className="webcam-debug-overlay">
           <strong>Gesture guide</strong>
           <div>stage: {describeStage(initStage)}</div>

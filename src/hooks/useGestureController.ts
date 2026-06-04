@@ -8,6 +8,8 @@ import type { GestureConfig, GestureEvent } from '../types'
 type InitStage = 'idle' | 'camera-starting' | 'camera-live' | 'vision-loading' | 'vision-live' | 'vision-failed'
 type Detector = FaceLandmarker | MobileTfjsDetector
 
+const GUIDE_STORAGE_KEY = 'handsfree-pdf-reader:gesture-guide'
+
 function normalizeMediaError(err: unknown) {
   if (!(err instanceof Error)) return 'Failed to start gesture control'
   if (err.name === 'NotAllowedError') return 'Camera permission was denied or blocked by the browser.'
@@ -94,6 +96,7 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
   const [pointerGuide, setPointerGuide] = useState<{ centerX: number; baseline: number; leftTarget: number; rightTarget: number; manual: boolean; offset: number } | null>(null)
   const [cooldownRemainingMs, setCooldownRemainingMs] = useState(0)
   const [autoLockCountdownMs, setAutoLockCountdownMs] = useState(0)
+  const [guideToast, setGuideToast] = useState<string | null>(null)
   const [initStage, setInitStage] = useState<InitStage>('idle')
 
   const stop = useCallback(() => {
@@ -255,6 +258,10 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
         pointerBaselineRef.current = avgCenterX
         autoBaselineLockedRef.current = true
         setAutoLockCountdownMs(0)
+        setGuideToast('Baseline locked')
+        try {
+          window.localStorage.setItem(GUIDE_STORAGE_KEY, JSON.stringify({ baseline: avgCenterX, offset: manualThresholdOffsetRef.current ?? 0.14, mode: 'auto' }))
+        } catch {}
         setDebugLines((prev) => [`auto baseline locked=${avgCenterX.toFixed(2)} samples=${sampleCount} forwardOnly=true`, ...prev.slice(0, 7)])
       }
     }
@@ -298,6 +305,37 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
     }, 100)
     return () => window.clearTimeout(timeout)
   }, [cooldownRemainingMs])
+
+  useEffect(() => {
+    if (!guideToast) return
+    const timeout = window.setTimeout(() => setGuideToast(null), 1800)
+    return () => window.clearTimeout(timeout)
+  }, [guideToast])
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(GUIDE_STORAGE_KEY)
+      if (!raw) return
+      const parsed = JSON.parse(raw) as { baseline?: number; offset?: number; mode?: 'auto' | 'manual' }
+      const baseline = typeof parsed.baseline === 'number' ? parsed.baseline : null
+      const offset = typeof parsed.offset === 'number' ? parsed.offset : 0.14
+      if (baseline === null) return
+      pointerBaselineRef.current = baseline
+      manualThresholdOffsetRef.current = offset
+      autoBaselineLockedRef.current = true
+      setPointerGuide((prev) => ({
+        centerX: prev?.centerX ?? baseline,
+        baseline,
+        leftTarget: Math.max(0.04, baseline - offset),
+        rightTarget: Math.min(0.96, baseline + offset),
+        manual: parsed.mode === 'manual',
+        offset,
+      }))
+      if (parsed.mode === 'manual') {
+        manualBaselineRef.current = baseline
+      }
+    } catch {}
+  }, [])
 
   useEffect(() => {
     if (autoBaselineLockedRef.current || autoBaselineStartedAtRef.current === null || manualBaselineRef.current !== null) return
@@ -389,11 +427,17 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
       videoRef.current.playsInline = true
       await videoRef.current.play()
       await new Promise((resolve) => window.setTimeout(resolve, isMobileDevice() ? 800 : 200))
+      const hasSavedManualBaseline = manualBaselineRef.current !== null
+      const hasSavedAutoBaseline = pointerBaselineRef.current !== null && autoBaselineLockedRef.current
       autoBaselineStartedAtRef.current = null
-      autoBaselineLockedRef.current = false
-      pointerBaselineRef.current = null
       faceCenterHistoryRef.current = []
-      setAutoLockCountdownMs(2000)
+      if (hasSavedManualBaseline || hasSavedAutoBaseline) {
+        setAutoLockCountdownMs(0)
+      } else {
+        autoBaselineLockedRef.current = false
+        pointerBaselineRef.current = null
+        setAutoLockCountdownMs(2000)
+      }
       setIsRunning(true)
       setInitStage('camera-live')
       setDebugLines([
@@ -444,6 +488,12 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
     const clamped = Math.min(0.9, Math.max(0.1, value))
     const offset = manualThresholdOffsetRef.current ?? 0.14
     manualBaselineRef.current = clamped
+    autoBaselineLockedRef.current = true
+    setAutoLockCountdownMs(0)
+    try {
+      window.localStorage.setItem(GUIDE_STORAGE_KEY, JSON.stringify({ baseline: clamped, offset, mode: 'manual' }))
+    } catch {}
+    setGuideToast('Manual guide saved')
     setPointerGuide((prev) => {
       const centerX = prev?.centerX ?? clamped
       return {
@@ -461,6 +511,12 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
   const setManualThresholdOffset = useCallback((value: number) => {
     const clamped = Math.min(0.32, Math.max(0.05, value))
     manualThresholdOffsetRef.current = clamped
+    try {
+      const baselineToSave = manualBaselineRef.current ?? pointerBaselineRef.current
+      if (baselineToSave !== null) {
+        window.localStorage.setItem(GUIDE_STORAGE_KEY, JSON.stringify({ baseline: baselineToSave, offset: clamped, mode: manualBaselineRef.current !== null ? 'manual' : 'auto' }))
+      }
+    } catch {}
     setPointerGuide((prev) => {
       if (!prev) return prev
       return {
@@ -480,13 +536,17 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
     autoBaselineLockedRef.current = false
     autoBaselineStartedAtRef.current = null
     faceCenterHistoryRef.current = []
+    try {
+      window.localStorage.removeItem(GUIDE_STORAGE_KEY)
+    } catch {}
+    setGuideToast('Guide reset')
     setAutoLockCountdownMs(isRunning ? 2000 : 0)
     setDebugLines((prev) => [`manual baseline reset`, ...prev.slice(0, 7)])
   }, [])
 
   const controls = useMemo(
-    () => ({ config, setConfig, isRunning, isLoading, error, lastGesture, debugLines, pointerGuide, cooldownRemainingMs, autoLockCountdownMs, start, stop, initStage, cameraFacingMode, switchCamera, setManualBaseline, setManualThresholdOffset, resetManualBaseline }),
-    [config, isRunning, isLoading, error, lastGesture, debugLines, pointerGuide, cooldownRemainingMs, autoLockCountdownMs, start, stop, initStage, cameraFacingMode, switchCamera, setManualBaseline, setManualThresholdOffset, resetManualBaseline],
+    () => ({ config, setConfig, isRunning, isLoading, error, lastGesture, debugLines, pointerGuide, cooldownRemainingMs, autoLockCountdownMs, guideToast, start, stop, initStage, cameraFacingMode, switchCamera, setManualBaseline, setManualThresholdOffset, resetManualBaseline }),
+    [config, isRunning, isLoading, error, lastGesture, debugLines, pointerGuide, cooldownRemainingMs, autoLockCountdownMs, guideToast, start, stop, initStage, cameraFacingMode, switchCamera, setManualBaseline, setManualThresholdOffset, resetManualBaseline],
   )
 
   return { videoRef, ...controls }

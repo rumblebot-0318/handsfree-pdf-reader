@@ -254,6 +254,21 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   height: 100%;
   background: linear-gradient(90deg, #7aa2ff, #69ffba);
 }
+.guide-toast {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: rgba(10, 28, 52, 0.92);
+  color: #eef4ff;
+  border: 1px solid rgba(132, 165, 255, 0.24);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.22);
+  z-index: 4;
+  font-size: 13px;
+  font-weight: 700;
+}
 .webcam-debug-overlay {
   position: absolute;
   left: 12px;

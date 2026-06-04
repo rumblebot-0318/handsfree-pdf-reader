@@ -69,6 +69,7 @@ export default function App() {
             pointerGuide={gesture.pointerGuide}
             cooldownRemainingMs={gesture.cooldownRemainingMs}
             autoLockCountdownMs={gesture.autoLockCountdownMs}
+            guideToast={gesture.guideToast}
             onSetManualBaseline={gesture.setManualBaseline}
             onSetManualThresholdOffset={gesture.setManualThresholdOffset}
             onResetManualBaseline={gesture.resetManualBaseline}
