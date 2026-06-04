@@ -78,6 +78,7 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
   const lastFaceCountRef = useRef(0)
   const lastKeypointCountRef = useRef(0)
   const faceCenterHistoryRef = useRef<Array<{ x: number; at: number }>>([])
+  const autoBaselineLockedRef = useRef(false)
   const pointerBaselineRef = useRef<number | null>(null)
   const manualBaselineRef = useRef<number | null>(null)
   const manualThresholdOffsetRef = useRef<number | null>(null)
@@ -225,12 +226,18 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
     const now = Date.now()
     const centerX = (xMin + boxWidth / 2) / width
     faceCenterHistoryRef.current = [
-      ...faceCenterHistoryRef.current.filter((entry) => now - entry.at <= 3000),
+      ...faceCenterHistoryRef.current.filter((entry) => now - entry.at <= 2000),
       { x: centerX, at: now },
     ]
 
-    if (manualBaselineRef.current === null && pointerBaselineRef.current === null) {
-      pointerBaselineRef.current = centerX
+    if (manualBaselineRef.current === null && !autoBaselineLockedRef.current) {
+      const sampleCount = faceCenterHistoryRef.current.length
+      if (sampleCount >= 6) {
+        const avgCenterX = faceCenterHistoryRef.current.reduce((sum, entry) => sum + entry.x, 0) / sampleCount
+        pointerBaselineRef.current = avgCenterX
+        autoBaselineLockedRef.current = true
+        setDebugLines((prev) => [`auto baseline locked=${avgCenterX.toFixed(2)} samples=${sampleCount}`, ...prev.slice(0, 7)])
+      }
     }
 
     const baseline = manualBaselineRef.current ?? pointerBaselineRef.current ?? centerX
@@ -434,6 +441,9 @@ export function useGestureController(onGesture: (event: GestureEvent) => void) {
   const resetManualBaseline = useCallback(() => {
     manualBaselineRef.current = null
     manualThresholdOffsetRef.current = null
+    pointerBaselineRef.current = null
+    autoBaselineLockedRef.current = false
+    faceCenterHistoryRef.current = []
     setDebugLines((prev) => [`manual baseline reset`, ...prev.slice(0, 7)])
   }, [])
 
